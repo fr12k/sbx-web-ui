@@ -1,0 +1,980 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sandbox Manager — Concise</title>
+  <style>
+    /* === Reset & Base === */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: #0f0f1a;
+      color: #d0d0e0;
+      padding: 20px;
+      min-height: 100vh;
+    }
+
+    /* === Scrollbar === */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #1a1a2e; }
+    ::-webkit-scrollbar-thumb { background: #3a3a5a; border-radius: 3px; }
+
+    /* === Layout === */
+    .app-wrapper {
+      max-width: 1400px;
+      margin: 0 auto;
+      position: relative;
+    }
+
+    /* === Header / Top Bar === */
+    .top-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    .top-bar-left {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .page-title {
+      font-size: 1.4rem;
+      font-weight: 700;
+      color: #f0f0ff;
+      letter-spacing: -0.3px;
+    }
+    .health-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: #1e1e36;
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 0.8rem;
+      border: 1px solid #2a2a48;
+    }
+    .health-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+    .health-dot.ok { background: #2ecc71; box-shadow: 0 0 6px #2ecc7180; }
+    .health-dot.err { background: #e74c3c; box-shadow: 0 0 6px #e74c3c80; }
+    .version-tag {
+      color: #8888aa;
+      font-size: 0.75rem;
+    }
+    .sock-path {
+      font-family: "SF Mono", "Fira Code", monospace;
+      font-size: 0.7rem;
+      color: #7777aa;
+      background: #15152a;
+      padding: 4px 10px;
+      border-radius: 12px;
+      border: 1px solid #2a2a48;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 300px;
+    }
+    .btn-create {
+      background: #e94560;
+      color: #fff;
+      border: none;
+      padding: 10px 24px;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 0.9rem;
+      cursor: pointer;
+      transition: background 0.15s, transform 0.1s;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      white-space: nowrap;
+    }
+    .btn-create:hover { background: #ff5775; }
+    .btn-create:active { transform: scale(0.97); }
+
+    /* === Summary Bar === */
+    .summary-bar {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    .summary-card {
+      background: #1a1a2e;
+      border: 1px solid #2a2a48;
+      border-radius: 12px;
+      padding: 14px 18px;
+      text-align: center;
+    }
+    .summary-card .num {
+      font-size: 2rem;
+      font-weight: 700;
+      line-height: 1.1;
+    }
+    .summary-card .num.total   { color: #a0a0ff; }
+    .summary-card .num.running { color: #2ecc71; }
+    .summary-card .num.stopped { color: #e74c3c; }
+    .summary-card .label {
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      color: #8888aa;
+      margin-top: 4px;
+    }
+
+    /* === Two-column layout (main + side) === */
+    .main-area {
+      display: flex;
+      gap: 20px;
+      align-items: flex-start;
+    }
+    .main-content {
+      flex: 1;
+      min-width: 0;
+    }
+    .side-panel-placeholder {
+      width: 0;
+      overflow: hidden;
+      transition: width 0.3s ease;
+      flex-shrink: 0;
+    }
+    .side-panel-placeholder.open {
+      width: 380px;
+    }
+
+    /* === Sandbox Table === */
+    .section-label {
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: #8888aa;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .section-label::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: #2a2a48;
+    }
+
+    .sandbox-table {
+      width: 100%;
+      border-collapse: collapse;
+      background: #1a1a2e;
+      border-radius: 12px;
+      overflow: hidden;
+      border: 1px solid #2a2a48;
+      margin-bottom: 20px;
+    }
+    .sandbox-table th {
+      text-align: left;
+      padding: 10px 14px;
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      color: #8888aa;
+      background: #15152a;
+      border-bottom: 1px solid #2a2a48;
+    }
+    .sandbox-table td {
+      padding: 10px 14px;
+      font-size: 0.85rem;
+      border-bottom: 1px solid #252542;
+      vertical-align: middle;
+    }
+    .sandbox-table tr:last-child td {
+      border-bottom: none;
+    }
+    .sandbox-table tr:hover td {
+      background: #1e1e3a;
+    }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 10px;
+      border-radius: 12px;
+      font-size: 0.75rem;
+      font-weight: 500;
+    }
+    .status-badge.running {
+      background: #1a3a2a;
+      color: #2ecc71;
+      border: 1px solid #2ecc7140;
+    }
+    .status-badge.stopped {
+      background: #3a1a1a;
+      color: #e74c3c;
+      border: 1px solid #e74c3c40;
+    }
+    .status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+    .status-dot.running { background: #2ecc71; }
+    .status-dot.stopped { background: #e74c3c; }
+
+    .col-name  { width: 28%; }
+    .col-agent { width: 22%; }
+    .col-status { width: 16%; }
+    .col-actions { width: 34%; text-align: right; }
+
+    .btn-sm {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 5px 12px;
+      border-radius: 6px;
+      font-size: 0.75rem;
+      font-weight: 500;
+      border: none;
+      cursor: pointer;
+      transition: background 0.12s;
+    }
+    .btn-sm.details {
+      background: #2a2a50;
+      color: #a0a0ff;
+    }
+    .btn-sm.details:hover { background: #3a3a6a; }
+    .btn-sm.delete {
+      background: transparent;
+      color: #e74c3c;
+      border: 1px solid #e74c3c40;
+    }
+    .btn-sm.delete:hover { background: #3a1a1a; }
+    .btn-sm.copy {
+      background: #1e2e3e;
+      color: #6a9fcf;
+    }
+    .btn-sm.copy:hover { background: #2a3e5a; }
+    .actions-group {
+      display: inline-flex;
+      gap: 6px;
+    }
+
+    /* === Inline Row Expansion === */
+    .detail-row {
+      display: none;
+      background: #12122a;
+    }
+    .detail-row.open {
+      display: table-row;
+    }
+    .detail-cell {
+      padding: 14px 20px !important;
+    }
+    .detail-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px 24px;
+      font-size: 0.8rem;
+    }
+    .detail-item {
+      display: flex;
+      gap: 6px;
+    }
+    .detail-item .key {
+      color: #8888aa;
+      min-width: 110px;
+      flex-shrink: 0;
+    }
+    .detail-item .val {
+      color: #d0d0f0;
+      word-break: break-all;
+      font-family: "SF Mono", "Fira Code", monospace;
+      font-size: 0.75rem;
+    }
+
+    /* === Slide-out Panel === */
+    .slide-panel {
+      background: #1a1a2e;
+      border: 1px solid #2a2a48;
+      border-radius: 12px;
+      padding: 20px;
+      width: 380px;
+      flex-shrink: 0;
+    }
+    .slide-panel h3 {
+      font-size: 1rem;
+      font-weight: 600;
+      color: #f0f0ff;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .slide-panel .close-btn {
+      background: none;
+      border: none;
+      color: #8888aa;
+      font-size: 1.2rem;
+      cursor: pointer;
+      padding: 0 4px;
+    }
+    .slide-panel .close-btn:hover { color: #e94560; }
+    .form-group {
+      margin-bottom: 12px;
+    }
+    .form-group label {
+      display: block;
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #8888aa;
+      margin-bottom: 3px;
+    }
+    .form-group input,
+    .form-group select {
+      width: 100%;
+      padding: 8px 12px;
+      background: #0f0f1a;
+      border: 1px solid #2a2a48;
+      border-radius: 6px;
+      color: #d0d0e0;
+      font-size: 0.85rem;
+      outline: none;
+      transition: border-color 0.12s;
+    }
+    .form-group input:focus,
+    .form-group select:focus {
+      border-color: #e94560;
+    }
+    .form-group input::placeholder {
+      color: #55557a;
+    }
+    .form-row {
+      display: flex;
+      gap: 10px;
+    }
+    .form-row .form-group {
+      flex: 1;
+    }
+    .btn-submit {
+      width: 100%;
+      background: #e94560;
+      color: #fff;
+      border: none;
+      padding: 10px;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 0.85rem;
+      cursor: pointer;
+      margin-top: 4px;
+      transition: background 0.12s;
+    }
+    .btn-submit:hover { background: #ff5775; }
+
+    /* === Template List === */
+    .template-strip {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 20px;
+    }
+    .template-chip {
+      background: #1e1e36;
+      border: 1px solid #2a2a48;
+      border-radius: 8px;
+      padding: 6px 14px;
+      font-size: 0.8rem;
+      color: #b0b0d0;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .template-chip .tname {
+      font-weight: 500;
+      color: #d0d0ff;
+    }
+    .template-chip .tdesc {
+      color: #8888aa;
+      font-size: 0.7rem;
+    }
+
+    /* === Quick Policy === */
+    .policy-section {
+      background: #1a1a2e;
+      border: 1px solid #2a2a48;
+      border-radius: 12px;
+      padding: 16px 20px;
+      margin-bottom: 20px;
+    }
+    .policy-section .section-label { margin-bottom: 12px; }
+    .policy-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 12px;
+    }
+    .policy-table th {
+      text-align: left;
+      padding: 6px 10px;
+      font-size: 0.65rem;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #8888aa;
+      border-bottom: 1px solid #2a2a48;
+    }
+    .policy-table td {
+      padding: 6px 10px;
+      font-size: 0.8rem;
+      border-bottom: 1px solid #252542;
+    }
+    .policy-table .action-tag {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 0.7rem;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+    .action-tag.allow { background: #1a3a2a; color: #2ecc71; }
+    .action-tag.deny  { background: #3a1a1a; color: #e74c3c; }
+    .action-tag.remove-resource { background: #3a2a1a; color: #f39c12; }
+    .action-tag.remove-id      { background: #2a1a3a; color: #a06adf; }
+    .action-tag.default-set    { background: #1a2a3a; color: #5fa8d3; }
+    .btn-sm.remove-pol {
+      background: transparent;
+      border: none;
+      color: #e74c3c;
+      cursor: pointer;
+      font-size: 0.8rem;
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+    .btn-sm.remove-pol:hover { background: #3a1a1a; }
+
+    .quick-policy-form {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: flex-end;
+      padding-top: 8px;
+      border-top: 1px solid #2a2a48;
+    }
+    .quick-policy-form .pf-group {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .quick-policy-form .pf-group label {
+      font-size: 0.6rem;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      color: #8888aa;
+    }
+    .quick-policy-form .pf-group input,
+    .quick-policy-form .pf-group select {
+      padding: 6px 10px;
+      background: #0f0f1a;
+      border: 1px solid #2a2a48;
+      border-radius: 5px;
+      color: #d0d0e0;
+      font-size: 0.8rem;
+      outline: none;
+    }
+    .quick-policy-form .pf-group input:focus,
+    .quick-policy-form .pf-group select:focus {
+      border-color: #e94560;
+    }
+    .quick-policy-form .pf-group input::placeholder {
+      color: #55557a;
+    }
+    .btn-add-pol {
+      background: #2a2a50;
+      color: #a0a0ff;
+      border: none;
+      padding: 6px 16px;
+      border-radius: 6px;
+      font-size: 0.75rem;
+      font-weight: 500;
+      cursor: pointer;
+      white-space: nowrap;
+      align-self: flex-end;
+    }
+    .btn-add-pol:hover { background: #3a3a6a; }
+
+    /* === Responsive === */
+    @media (max-width: 860px) {
+      .main-area { flex-direction: column; }
+      .side-panel-placeholder { width: 100% !important; }
+      .side-panel-placeholder.open { width: 100% !important; }
+      .slide-panel { width: 100%; }
+      .sock-path { max-width: 180px; }
+      .detail-grid { grid-template-columns: 1fr; }
+      .quick-policy-form { flex-direction: column; align-items: stretch; }
+    }
+    @media (max-width: 500px) {
+      body { padding: 12px; }
+      .top-bar { flex-direction: column; align-items: stretch; }
+      .sandbox-table th, .sandbox-table td { padding: 8px 10px; font-size: 0.75rem; }
+      .summary-bar { grid-template-columns: repeat(3, 1fr); }
+      .summary-card .num { font-size: 1.5rem; }
+      .actions-group { flex-wrap: wrap; }
+    }
+
+    /* === Misc === */
+    .empty-note {
+      color: #55557a;
+      font-size: 0.8rem;
+      padding: 6px 0;
+    }
+    .flex-center {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+  </style>
+</head>
+<body>
+<div class="app-wrapper">
+
+  <!-- ============ TOP BAR ============ -->
+  <header class="top-bar">
+    <div class="top-bar-left">
+      <h1 class="page-title">Sandbox Manager — Concise</h1>
+      <span class="health-badge">
+        <span class="health-dot ok"></span>
+        Daemon OK
+        <span class="version-tag">v0.5.2</span>
+      </span>
+      <span class="sock-path" title="Socket path">/var/run/sandboxd/sandbox.sock</span>
+    </div>
+    <button class="btn-create" id="btnCreate">+ Create Sandbox</button>
+  </header>
+
+  <!-- ============ SUMMARY BAR ============ -->
+  <div class="summary-bar">
+    <div class="summary-card"><div class="num total">4</div><div class="label">Total</div></div>
+    <div class="summary-card"><div class="num running">3</div><div class="label">Running</div></div>
+    <div class="summary-card"><div class="num stopped">1</div><div class="label">Stopped</div></div>
+  </div>
+
+  <!-- ============ MAIN AREA (Table + Slide-out) ============ -->
+  <div class="main-area">
+
+    <!-- LEFT: Main Content -->
+    <div class="main-content">
+
+      <!-- Templates -->
+      <div class="section-label">Templates</div>
+      <div class="template-strip">
+        <span class="template-chip"><span class="tname">isolated-dev</span><span class="tdesc">Ubuntu 22.04 + build tools</span></span>
+        <span class="template-chip"><span class="tname">minimal-node</span><span class="tdesc">Node.js 20 sandbox</span></span>
+        <span class="template-chip"><span class="tname">rust-builder</span><span class="tdesc">Rust 1.75 + cargo</span></span>
+        <span class="template-chip"><span class="tname">data-science</span><span class="tdesc">Python 3.12 + Jupyter</span></span>
+      </div>
+
+      <!-- Sandbox Table -->
+      <div class="section-label">Sandboxes</div>
+      <table class="sandbox-table" id="sandboxTable">
+        <thead>
+          <tr>
+            <th class="col-name">Name</th>
+            <th class="col-agent">Agent</th>
+            <th class="col-status">Status</th>
+            <th class="col-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="sandboxBody">
+          <!-- Row 1 -->
+          <tr>
+            <td>dev-01</td>
+            <td>agent-alpha</td>
+            <td><span class="status-badge running"><span class="status-dot running"></span>Running</span></td>
+            <td style="text-align:right;">
+              <div class="actions-group">
+                <button class="btn-sm details toggle-detail" data-target="detail-1">Details</button>
+                <button class="btn-sm delete">Delete</button>
+              </div>
+            </td>
+          </tr>
+          <tr class="detail-row" id="detail-1">
+            <td colspan="4" class="detail-cell">
+              <div class="detail-grid">
+                <div class="detail-item"><span class="key">RuntimeName</span><span class="val">dev-01</span></div>
+                <div class="detail-item"><span class="key">AgentName</span><span class="val">agent-alpha</span></div>
+                <div class="detail-item"><span class="key">WorkspaceDir</span><span class="val">/workspaces/dev-01</span></div>
+                <div class="detail-item"><span class="key">SocketPath</span><span class="val">/tmp/sandbox-dev-01.sock</span></div>
+                <div class="detail-item"><span class="key">NetworkName</span><span class="val">sbx-net-01</span></div>
+                <div class="detail-item"><span class="key">Detached</span><span class="val">true</span></div>
+                <div class="detail-item"><span class="key">PullPolicy</span><span class="val">always</span></div>
+                <div class="detail-item"><span class="key">Profile</span><span class="val">isolated-dev</span></div>
+                <div class="detail-item"><span class="key">ID</span><span class="val">a1b2c3d4-e5f6-7890-abcd-ef1234567890</span></div>
+              </div>
+            </td>
+          </tr>
+
+          <!-- Row 2 -->
+          <tr>
+            <td>api-tester</td>
+            <td>agent-beta</td>
+            <td><span class="status-badge running"><span class="status-dot running"></span>Running</span></td>
+            <td style="text-align:right;">
+              <div class="actions-group">
+                <button class="btn-sm details toggle-detail" data-target="detail-2">Details</button>
+                <button class="btn-sm delete">Delete</button>
+              </div>
+            </td>
+          </tr>
+          <tr class="detail-row" id="detail-2">
+            <td colspan="4" class="detail-cell">
+              <div class="detail-grid">
+                <div class="detail-item"><span class="key">RuntimeName</span><span class="val">api-tester</span></div>
+                <div class="detail-item"><span class="key">AgentName</span><span class="val">agent-beta</span></div>
+                <div class="detail-item"><span class="key">WorkspaceDir</span><span class="val">/workspaces/api-tester</span></div>
+                <div class="detail-item"><span class="key">SocketPath</span><span class="val">/tmp/sandbox-api-tester.sock</span></div>
+                <div class="detail-item"><span class="key">NetworkName</span><span class="val">sbx-net-02</span></div>
+                <div class="detail-item"><span class="key">Detached</span><span class="val">true</span></div>
+                <div class="detail-item"><span class="key">PullPolicy</span><span class="val">missing</span></div>
+                <div class="detail-item"><span class="key">Profile</span><span class="val">minimal-node</span></div>
+                <div class="detail-item"><span class="key">ID</span><span class="val">b2c3d4e5-f6a7-8901-bcde-f12345678901</span></div>
+              </div>
+            </td>
+          </tr>
+
+          <!-- Row 3 -->
+          <tr>
+            <td>rust-builder-1</td>
+            <td>agent-alpha</td>
+            <td><span class="status-badge running"><span class="status-dot running"></span>Running</span></td>
+            <td style="text-align:right;">
+              <div class="actions-group">
+                <button class="btn-sm details toggle-detail" data-target="detail-3">Details</button>
+                <button class="btn-sm delete">Delete</button>
+              </div>
+            </td>
+          </tr>
+          <tr class="detail-row" id="detail-3">
+            <td colspan="4" class="detail-cell">
+              <div class="detail-grid">
+                <div class="detail-item"><span class="key">RuntimeName</span><span class="val">rust-builder-1</span></div>
+                <div class="detail-item"><span class="key">AgentName</span><span class="val">agent-alpha</span></div>
+                <div class="detail-item"><span class="key">WorkspaceDir</span><span class="val">/workspaces/rust-builder-1</span></div>
+                <div class="detail-item"><span class="key">SocketPath</span><span class="val">/tmp/sandbox-rust-builder-1.sock</span></div>
+                <div class="detail-item"><span class="key">NetworkName</span><span class="val">sbx-net-01</span></div>
+                <div class="detail-item"><span class="key">Detached</span><span class="val">false</span></div>
+                <div class="detail-item"><span class="key">PullPolicy</span><span class="val">never</span></div>
+                <div class="detail-item"><span class="key">Profile</span><span class="val">rust-builder</span></div>
+                <div class="detail-item"><span class="key">ID</span><span class="val">c3d4e5f6-a7b8-9012-cdef-123456789012</span></div>
+              </div>
+            </td>
+          </tr>
+
+          <!-- Row 4 -->
+          <tr>
+            <td>legacy-worker</td>
+            <td>agent-gamma</td>
+            <td><span class="status-badge stopped"><span class="status-dot stopped"></span>Stopped</span></td>
+            <td style="text-align:right;">
+              <div class="actions-group">
+                <button class="btn-sm details toggle-detail" data-target="detail-4">Details</button>
+                <button class="btn-sm delete">Delete</button>
+              </div>
+            </td>
+          </tr>
+          <tr class="detail-row" id="detail-4">
+            <td colspan="4" class="detail-cell">
+              <div class="detail-grid">
+                <div class="detail-item"><span class="key">RuntimeName</span><span class="val">legacy-worker</span></div>
+                <div class="detail-item"><span class="key">AgentName</span><span class="val">agent-gamma</span></div>
+                <div class="detail-item"><span class="key">WorkspaceDir</span><span class="val">/workspaces/legacy-worker</span></div>
+                <div class="detail-item"><span class="key">SocketPath</span><span class="val">—</span></div>
+                <div class="detail-item"><span class="key">NetworkName</span><span class="val">—</span></div>
+                <div class="detail-item"><span class="key">Detached</span><span class="val">false</span></div>
+                <div class="detail-item"><span class="key">PullPolicy</span><span class="val">always</span></div>
+                <div class="detail-item"><span class="key">Profile</span><span class="val">data-science</span></div>
+                <div class="detail-item"><span class="key">ID</span><span class="val">d4e5f6a7-b8c9-0123-defa-234567890123</span></div>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <!-- ============ POLICY SECTION ============ -->
+      <div class="policy-section">
+        <div class="section-label">Policy Rules</div>
+        <table class="policy-table">
+          <thead>
+            <tr>
+              <th>Action</th>
+              <th>Resource / ID</th>
+              <th>Scope</th>
+              <th style="width:40px;"></th>
+            </tr>
+          </thead>
+          <tbody id="policyBody">
+            <tr>
+              <td><span class="action-tag allow">Allow</span></td>
+              <td>docker://nginx:latest</td>
+              <td>pull</td>
+              <td><button class="btn-sm remove-pol">✕</button></td>
+            </tr>
+            <tr>
+              <td><span class="action-tag allow">Allow</span></td>
+              <td>docker://ubuntu:*</td>
+              <td>run</td>
+              <td><button class="btn-sm remove-pol">✕</button></td>
+            </tr>
+            <tr>
+              <td><span class="action-tag deny">Deny</span></td>
+              <td>docker://malicious/*</td>
+              <td>—</td>
+              <td><button class="btn-sm remove-pol">✕</button></td>
+            </tr>
+            <tr>
+              <td><span class="action-tag remove-resource">Remove Resource</span></td>
+              <td>docker://old-image:v1</td>
+              <td>—</td>
+              <td><button class="btn-sm remove-pol">✕</button></td>
+            </tr>
+            <tr>
+              <td><span class="action-tag remove-id">Remove ID</span></td>
+              <td>a1b2c3d4-e5f6-7890-abcd-ef1234567890</td>
+              <td>—</td>
+              <td><button class="btn-sm remove-pol">✕</button></td>
+            </tr>
+            <tr>
+              <td><span class="action-tag default-set">Default Preset</span></td>
+              <td>isolated-dev</td>
+              <td>—</td>
+              <td><button class="btn-sm remove-pol">✕</button></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <!-- Inline Quick Policy Form -->
+        <div class="quick-policy-form" id="quickPolicyForm">
+          <div class="pf-group">
+            <label>Action</label>
+            <select id="polAction">
+              <option value="allow">Allow</option>
+              <option value="deny">Deny</option>
+              <option value="remove-resource">Remove Resource</option>
+              <option value="remove-id">Remove ID</option>
+              <option value="default-set">Default Preset</option>
+            </select>
+          </div>
+          <div class="pf-group" style="flex:2;min-width:160px;">
+            <label>Resource / ID</label>
+            <input type="text" id="polResource" placeholder="e.g. docker://ubuntu:*" />
+          </div>
+          <div class="pf-group" style="flex:1;min-width:100px;">
+            <label>Scope (optional)</label>
+            <input type="text" id="polScope" placeholder="pull / run" />
+          </div>
+          <button class="btn-add-pol" id="btnAddPolicy">+ Add Rule</button>
+        </div>
+      </div>
+
+    </div><!-- /main-content -->
+
+    <!-- RIGHT: Slide-out Panel Placeholder -->
+    <div class="side-panel-placeholder" id="slidePanelContainer">
+      <div class="slide-panel" id="slidePanel">
+        <h3>
+          Create Sandbox
+          <button class="close-btn" id="closePanel">&times;</button>
+        </h3>
+        <div class="form-group">
+          <label>Runtime Name</label>
+          <input type="text" placeholder="my-sandbox" />
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Agent Name</label>
+            <input type="text" placeholder="agent-alpha" />
+          </div>
+          <div class="form-group">
+            <label>Profile</label>
+            <select>
+              <option value="">Default</option>
+              <option value="isolated-dev">isolated-dev</option>
+              <option value="minimal-node">minimal-node</option>
+              <option value="rust-builder">rust-builder</option>
+              <option value="data-science">data-science</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Workspace Directory</label>
+          <input type="text" placeholder="/workspaces/my-sandbox" />
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Detached</label>
+            <select>
+              <option value="true">true</option>
+              <option value="false">false</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Pull Policy</label>
+            <select>
+              <option value="always">always</option>
+              <option value="missing">missing</option>
+              <option value="never">never</option>
+            </select>
+          </div>
+        </div>
+        <button class="btn-submit">Create Sandbox</button>
+      </div>
+    </div>
+
+  </div><!-- /main-area -->
+
+  <!-- ============ FOOTER: Connection Info ============ -->
+  <div style="margin-top:20px;padding:10px 16px;background:#15152a;border-radius:8px;border:1px solid #2a2a48;display:flex;flex-wrap:wrap;gap:12px;align-items:center;font-size:0.75rem;">
+    <span style="color:#8888aa;">Connection</span>
+    <span style="font-family:monospace;color:#b0b0d0;">/var/run/sandboxd/sandbox.sock</span>
+    <span style="color:#55557a;">|</span>
+    <span style="color:#8888aa;">API</span>
+    <span style="font-family:monospace;color:#b0b0d0;">v0.5.2</span>
+    <span style="color:#55557a;">|</span>
+    <span style="color:#8888aa;">Uptime</span>
+    <span style="color:#b0b0d0;">47d 6h 23m</span>
+    <span style="color:#55557a;">|</span>
+    <span style="color:#8888aa;">Agents</span>
+    <span style="color:#b0b0d0;">3 online</span>
+  </div>
+
+</div><!-- /app-wrapper -->
+
+<script>
+(function() {
+  'use strict';
+
+  // === Toggle Detail Rows ===
+  const toggleButtons = document.querySelectorAll('.toggle-detail');
+  toggleButtons.forEach(btn => {
+    btn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      const targetId = this.getAttribute('data-target');
+      const row = document.getElementById(targetId);
+      if (row) {
+        row.classList.toggle('open');
+        this.textContent = row.classList.contains('open') ? 'Hide' : 'Details';
+      }
+    });
+  });
+
+  // === Slide-out Panel ===
+  const btnCreate = document.getElementById('btnCreate');
+  const panelContainer = document.getElementById('slidePanelContainer');
+  const closePanel = document.getElementById('closePanel');
+
+  function openPanel() {
+    panelContainer.classList.add('open');
+  }
+  function closePanelFn() {
+    panelContainer.classList.remove('open');
+  }
+
+  btnCreate.addEventListener('click', openPanel);
+  closePanel.addEventListener('click', closePanelFn);
+
+  // Close panel on Escape
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && panelContainer.classList.contains('open')) {
+      closePanelFn();
+    }
+  });
+
+  // === Delete buttons (just remove the row) ===
+  document.querySelectorAll('.btn-sm.delete').forEach(btn => {
+    btn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      const row = this.closest('tr');
+      if (row && confirm('Delete this sandbox?')) {
+        // Also remove the detail row that follows
+        const detailId = row.querySelector('.toggle-detail')?.getAttribute('data-target');
+        const detailRow = detailId ? document.getElementById(detailId) : null;
+        if (detailRow) detailRow.remove();
+        row.remove();
+        updateCounts();
+      }
+    });
+  });
+
+  // === Policy remove ===
+  document.querySelectorAll('.remove-pol').forEach(btn => {
+    btn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      const row = this.closest('tr');
+      if (row) row.remove();
+    });
+  });
+
+  // === Add Policy Rule ===
+  document.getElementById('btnAddPolicy').addEventListener('click', function() {
+    const action = document.getElementById('polAction').value;
+    const resource = document.getElementById('polResource').value.trim();
+    const scope = document.getElementById('polScope').value.trim();
+
+    if (!resource) {
+      alert('Please enter a resource or ID.');
+      return;
+    }
+
+    const tbody = document.getElementById('policyBody');
+    const tr = document.createElement('tr');
+    const actionLabels = {
+      'allow': 'Allow',
+      'deny': 'Deny',
+      'remove-resource': 'Remove Resource',
+      'remove-id': 'Remove ID',
+      'default-set': 'Default Preset'
+    };
+    tr.innerHTML = `
+      <td><span class="action-tag ${action}">${actionLabels[action] || action}</span></td>
+      <td>${resource}</td>
+      <td>${scope || '—'}</td>
+      <td><button class="btn-sm remove-pol">✕</button></td>
+    `;
+    tbody.appendChild(tr);
+
+    // Wire up the remove button
+    tr.querySelector('.remove-pol').addEventListener('click', function(e) {
+      e.stopPropagation();
+      tr.remove();
+    });
+
+    // Clear inputs
+    document.getElementById('polResource').value = '';
+    document.getElementById('polScope').value = '';
+  });
+
+  // === Update summary counts (after delete) ===
+  function updateCounts() {
+    const rows = document.querySelectorAll('#sandboxBody > tr:not(.detail-row)');
+    let running = 0, stopped = 0;
+    rows.forEach(row => {
+      const badge = row.querySelector('.status-badge');
+      if (badge) {
+        if (badge.classList.contains('running')) running++;
+        else if (badge.classList.contains('stopped')) stopped++;
+      }
+    });
+    const total = rows.length;
+    document.querySelector('.summary-card .num.total').textContent = total;
+    document.querySelector('.summary-card .num.running').textContent = running;
+    document.querySelector('.summary-card .num.stopped').textContent = stopped;
+  }
+
+})();
+</script>
+</body>
+</html>

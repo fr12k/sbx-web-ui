@@ -1,0 +1,774 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sandbox Manager — Polished</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --sidebar-w: 240px;
+    --accent: #6366f1;
+    --accent-hover: #818cf8;
+    --accent-subtle: rgba(99,102,241,0.12);
+    --bg-body: #0f0f1a;
+    --bg-content: #16162b;
+    --bg-card: #1c1c35;
+    --bg-hover: #252550;
+    --bg-sidebar: linear-gradient(180deg, #0f0f23 0%, #1a1a3e 100%);
+    --text-primary: #e8e8f0;
+    --text-secondary: #9898b8;
+    --text-muted: #6b6b8a;
+    --border: #2a2a4a;
+    --success: #22c55e;
+    --danger: #ef4444;
+    --warning: #f59e0b;
+    --radius: 10px;
+    --radius-sm: 6px;
+    --shadow: 0 4px 20px rgba(0,0,0,0.4);
+    --transition: 0.25s cubic-bezier(0.4,0,0.2,1);
+    --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+  html, body { height: 100%; }
+  body {
+    font-family: var(--font);
+    background: var(--bg-body);
+    color: var(--text-primary);
+    display: flex;
+    line-height: 1.5;
+    font-size: 14px;
+  }
+
+  /* ── Sidebar ── */
+  .sidebar {
+    width: var(--sidebar-w);
+    min-height: 100vh;
+    background: var(--bg-sidebar);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    position: fixed;
+    inset: 0 0 0 0;
+    z-index: 100;
+  }
+  .sidebar-brand {
+    padding: 1.25rem 1.25rem 1rem;
+    border-bottom: 1px solid var(--border);
+  }
+  .sidebar-brand h1 {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #fff;
+    letter-spacing: -0.02em;
+  }
+  .sidebar-brand h1 span { color: var(--accent); }
+  .sidebar-brand small {
+    display: block;
+    color: var(--text-muted);
+    font-size: 0.7rem;
+    margin-top: 0.15rem;
+    font-weight: 400;
+  }
+  .sidebar-nav { padding: 0.75rem 0.75rem; flex: 1; }
+  .sidebar-nav a {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    padding: 0.6rem 0.85rem;
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    text-decoration: none;
+    font-size: 0.85rem;
+    font-weight: 500;
+    transition: all var(--transition);
+    margin-bottom: 2px;
+    cursor: pointer;
+  }
+  .sidebar-nav a:hover { background: var(--bg-hover); color: var(--text-primary); }
+  .sidebar-nav a.active {
+    background: var(--accent-subtle);
+    color: var(--accent);
+    font-weight: 600;
+  }
+  .sidebar-nav a svg { width: 18px; height: 18px; flex-shrink: 0; opacity: 0.7; }
+  .sidebar-nav a.active svg { opacity: 1; }
+  .sidebar-footer {
+    padding: 1rem 1.25rem;
+    border-top: 1px solid var(--border);
+    font-size: 0.7rem;
+    color: var(--text-muted);
+  }
+  .sidebar-footer .health-dot {
+    display: inline-block;
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--success);
+    margin-right: 0.35rem;
+    box-shadow: 0 0 6px var(--success);
+  }
+
+  /* ── Content area ── */
+  .content {
+    margin-left: var(--sidebar-w);
+    flex: 1;
+    padding: 1.5rem 2rem;
+    max-width: calc(100vw - var(--sidebar-w));
+    overflow-y: auto;
+  }
+
+  /* ── Page header ── */
+  .page-hdr {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+  }
+  .page-hdr h2 { font-size: 1.35rem; font-weight: 700; letter-spacing: -0.02em; }
+  .page-hdr h2 small { font-size: 0.8rem; color: var(--text-muted); font-weight: 400; margin-left: 0.5rem; }
+
+  /* ── Cards ── */
+  .card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.25rem;
+    margin-bottom: 1.25rem;
+    box-shadow: var(--shadow);
+  }
+  .card h3 {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.75rem;
+  }
+
+  /* ── Stat cards grid ── */
+  .stat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+  }
+  .stat-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.1rem 1.25rem;
+    box-shadow: var(--shadow);
+    transition: all var(--transition);
+  }
+  .stat-card:hover { border-color: var(--accent); transform: translateY(-1px); }
+  .stat-card .stat-label { font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; }
+  .stat-card .stat-value { font-size: 1.8rem; font-weight: 700; margin-top: 0.2rem; letter-spacing: -0.03em; }
+  .stat-card .stat-sub { font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.15rem; }
+  .stat-card.accent { border-left: 3px solid var(--accent); }
+  .stat-card.success { border-left: 3px solid var(--success); }
+  .stat-card.warning { border-left: 3px solid var(--warning); }
+  .stat-card .icon { float: right; opacity: 0.15; font-size: 2rem; line-height: 1; }
+
+  /* ── Buttons ── */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.45rem 1rem;
+    border: none;
+    border-radius: var(--radius-sm);
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all var(--transition);
+    font-family: var(--font);
+  }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-primary:hover { background: var(--accent-hover); box-shadow: 0 2px 12px rgba(99,102,241,0.3); }
+  .btn-outline {
+    background: transparent; color: var(--text-secondary);
+    border: 1px solid var(--border);
+  }
+  .btn-outline:hover { border-color: var(--accent); color: var(--accent); }
+  .btn-danger { background: rgba(239,68,68,0.15); color: var(--danger); }
+  .btn-danger:hover { background: rgba(239,68,68,0.25); }
+  .btn-sm { padding: 0.3rem 0.65rem; font-size: 0.75rem; }
+
+  /* ── Table ── */
+  .table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+  table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+  thead { position: sticky; top: 0; z-index: 2; }
+  th {
+    background: var(--bg-content);
+    text-align: left;
+    padding: 0.65rem 0.85rem;
+    font-weight: 600;
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+  }
+  th:hover { color: var(--text-primary); }
+  th .sort-arrow { display: inline-block; margin-left: 0.25rem; opacity: 0.4; }
+  th.sorted .sort-arrow { opacity: 1; color: var(--accent); }
+  td {
+    padding: 0.55rem 0.85rem;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-secondary);
+    white-space: nowrap;
+  }
+  tr:nth-child(even) td { background: rgba(255,255,255,0.015); }
+  tr:hover td { background: var(--bg-hover); }
+  td .badge {
+    display: inline-block;
+    padding: 0.15rem 0.5rem;
+    border-radius: 999px;
+    font-size: 0.65rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+  .badge-ok { background: rgba(34,197,94,0.15); color: var(--success); }
+  .badge-err { background: rgba(239,68,68,0.15); color: var(--danger); }
+  .badge-warn { background: rgba(245,158,11,0.15); color: var(--warning); }
+  td.actions { text-align: right; }
+  .search-bar {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+  }
+  .search-bar input {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 0.5rem 0.85rem;
+    color: var(--text-primary);
+    font-size: 0.8rem;
+    font-family: var(--font);
+    flex: 1;
+    min-width: 200px;
+    outline: none;
+    transition: border var(--transition);
+  }
+  .search-bar input:focus { border-color: var(--accent); }
+
+  /* ── Drawer ── */
+  .drawer-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 200;
+  }
+  .drawer-overlay.active { display: block; }
+  .drawer {
+    position: fixed;
+    top: 0; right: -420px;
+    width: 400px;
+    height: 100%;
+    background: var(--bg-card);
+    border-left: 1px solid var(--border);
+    z-index: 201;
+    transition: right 0.35s cubic-bezier(0.4,0,0.2,1);
+    display: flex;
+    flex-direction: column;
+    box-shadow: -8px 0 32px rgba(0,0,0,0.5);
+  }
+  .drawer.active { right: 0; }
+  .drawer-hdr {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1.25rem 1.5rem;
+    border-bottom: 1px solid var(--border);
+  }
+  .drawer-hdr h3 { font-size: 1rem; font-weight: 600; }
+  .drawer-close {
+    background: none; border: none; color: var(--text-muted);
+    font-size: 1.3rem; cursor: pointer; padding: 0.25rem;
+    transition: color var(--transition);
+  }
+  .drawer-close:hover { color: var(--text-primary); }
+  .drawer-body { flex: 1; padding: 1.5rem; overflow-y: auto; }
+  .form-group { margin-bottom: 1rem; }
+  .form-group label { display: block; font-size: 0.75rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 0.3rem; }
+  .form-group input, .form-group select {
+    width: 100%;
+    background: var(--bg-content);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 0.5rem 0.75rem;
+    color: var(--text-primary);
+    font-size: 0.85rem;
+    font-family: var(--font);
+    outline: none;
+    transition: border var(--transition);
+  }
+  .form-group input:focus, .form-group select:focus { border-color: var(--accent); }
+  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+  .checkbox-group {
+    display: flex; align-items: center; gap: 0.5rem; margin: 0.75rem 0;
+  }
+  .checkbox-group label { margin: 0; cursor: pointer; }
+  .checkbox-group input { width: auto; }
+
+  /* ── Skeleton ── */
+  .skeleton {
+    background: linear-gradient(90deg, var(--bg-card) 25%, var(--bg-hover) 50%, var(--bg-card) 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s ease infinite;
+    border-radius: var(--radius-sm);
+    height: 1rem;
+    margin-bottom: 0.5rem;
+  }
+  @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+  /* ── Toast ── */
+  .toast-container {
+    position: fixed;
+    bottom: 1.5rem;
+    right: 1.5rem;
+    z-index: 999;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  .toast {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 0.75rem 1rem;
+    font-size: 0.8rem;
+    color: var(--text-primary);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+    animation: toastIn 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .toast.success { border-left: 3px solid var(--success); }
+  .toast.error { border-left: 3px solid var(--danger); }
+  @keyframes toastIn { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
+
+  /* ── Activity feed ── */
+  .activity-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.55rem 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.8rem;
+  }
+  .activity-item:last-child { border: none; }
+  .activity-icon {
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+    flex-shrink: 0;
+  }
+  .activity-icon.create { background: rgba(34,197,94,0.15); color: var(--success); }
+  .activity-icon.delete { background: rgba(239,68,68,0.15); color: var(--danger); }
+  .activity-icon.info { background: var(--accent-subtle); color: var(--accent); }
+  .activity-time { color: var(--text-muted); font-size: 0.7rem; margin-left: auto; white-space: nowrap; }
+
+  /* ── Accordion ── */
+  .accordion { border: 1px solid var(--border); border-radius: var(--radius-sm); margin-bottom: 0.75rem; }
+  .accordion-hdr {
+    padding: 0.65rem 1rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    transition: background var(--transition);
+  }
+  .accordion-hdr:hover { background: var(--bg-hover); }
+  .accordion-body { padding: 1rem; border-top: 1px solid var(--border); display: none; }
+  .accordion.open .accordion-body { display: block; }
+  .accordion-hdr .chevron { transition: transform var(--transition); font-size: 0.7rem; }
+  .accordion.open .chevron { transform: rotate(180deg); }
+
+  /* ── Responsive ── */
+  @media (max-width: 768px) {
+    .sidebar { width: 56px; }
+    .sidebar-brand h1, .sidebar-brand small, .sidebar-nav a span, .sidebar-footer { display: none; }
+    .sidebar-nav { padding: 0.5rem; }
+    .sidebar-nav a { justify-content: center; padding: 0.6rem; }
+    .content { margin-left: 56px; padding: 1rem; }
+    .drawer { width: 100%; right: -100%; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Sidebar -->
+<aside class="sidebar">
+  <div class="sidebar-brand">
+    <h1><span>S</span>andbox <span>M</span>gr</h1>
+    <small>Docker Sandboxes Daemon</small>
+  </div>
+  <nav class="sidebar-nav">
+    <a class="active" data-page="dashboard">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+      <span>Dashboard</span>
+    </a>
+    <a data-page="sandboxes">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+      <span>Sandboxes</span>
+    </a>
+    <a data-page="policy">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+      <span>Policy</span>
+    </a>
+    <a data-page="templates">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+      <span>Templates</span>
+    </a>
+    <a data-page="connection">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      <span>Connection</span>
+    </a>
+  </nav>
+  <div class="sidebar-footer">
+    <span class="health-dot"></span> Daemon healthy
+  </div>
+</aside>
+
+<!-- Content -->
+<main class="content">
+
+  <!-- ── DASHBOARD ── -->
+  <section id="page-dashboard">
+    <div class="page-hdr">
+      <h2>Dashboard <small>sandboxd v0.30.0</small></h2>
+    </div>
+
+    <div class="stat-grid">
+      <div class="stat-card accent">
+        <span class="icon">&#9881;</span>
+        <div class="stat-label">Daemon Status</div>
+        <div class="stat-value" style="color:var(--success)">Healthy</div>
+        <div class="stat-sub">API v0.2.0 · up 2h 14m</div>
+      </div>
+      <div class="stat-card success">
+        <span class="icon">&#9632;</span>
+        <div class="stat-label">Total Sandboxes</div>
+        <div class="stat-value">4</div>
+        <div class="stat-sub">3 running · 1 stopped</div>
+      </div>
+      <div class="stat-card warning">
+        <span class="icon">&#9632;</span>
+        <div class="stat-label">Running</div>
+        <div class="stat-value" style="color:var(--success)">3</div>
+        <div class="stat-sub">shell, claude, codex</div>
+      </div>
+      <div class="stat-card">
+        <span class="icon">&#9632;</span>
+        <div class="stat-label">Templates</div>
+        <div class="stat-value">5</div>
+        <div class="stat-sub">claude-code, codex, gemini …</div>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.25rem">
+      <div class="card">
+        <h3>Recent Activity</h3>
+        <div class="activity-item">
+          <div class="activity-icon create">+</div>
+          <span>Created sandbox <strong>dev-agent</strong> (claude)</span>
+          <span class="activity-time">2 min ago</span>
+        </div>
+        <div class="activity-item">
+          <div class="activity-icon delete">-</div>
+          <span>Deleted sandbox <strong>test-runner</strong></span>
+          <span class="activity-time">15 min ago</span>
+        </div>
+        <div class="activity-item">
+          <div class="activity-icon create">+</div>
+          <span>Created sandbox <strong>code-reviewer</strong> (codex)</span>
+          <span class="activity-time">47 min ago</span>
+        </div>
+        <div class="activity-item">
+          <div class="activity-icon info">&#9432;</div>
+          <span>Policy preset changed to <strong>balanced</strong></span>
+          <span class="activity-time">1h ago</span>
+        </div>
+        <div class="activity-item">
+          <div class="activity-icon delete">-</div>
+          <span>Removed policy rule <strong>api.old.com:443</strong></span>
+          <span class="activity-time">2h ago</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Daemon Info</h3>
+        <table style="width:100%;font-size:0.8rem;border:none">
+          <tr><td style="color:var(--text-muted);padding:0.35rem 0;border:none">Socket</td><td style="padding:0.35rem 0;border:none"><code style="font-size:0.7rem;background:var(--bg-content);padding:0.15rem 0.4rem;border-radius:3px">/run/sandboxd/sandboxd.sock</code></td></tr>
+          <tr><td style="color:var(--text-muted);padding:0.35rem 0;border:none">Proxy Socket</td><td style="padding:0.35rem 0;border:none"><code style="font-size:0.7rem;background:var(--bg-content);padding:0.15rem 0.4rem;border-radius:3px">/run/sandboxd/proxy.sock</code></td></tr>
+          <tr><td style="color:var(--text-muted);padding:0.35rem 0;border:none">Version</td><td style="padding:0.35rem 0;border:none">v0.30.0</td></tr>
+          <tr><td style="color:var(--text-muted);padding:0.35rem 0;border:none">API</td><td style="padding:0.35rem 0;border:none">0.2.0</td></tr>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── SANDBOXES ── -->
+  <section id="page-sandboxes" style="display:none">
+    <div class="page-hdr">
+      <h2>Sandboxes <small id="sbCountPolished">(4)</small></h2>
+      <button class="btn btn-primary" onclick="openDrawer()">+ New Sandbox</button>
+    </div>
+    <div class="search-bar">
+      <input type="text" id="sbSearch" placeholder="Search by name, agent, or workspace…" oninput="filterSandboxes()">
+      <button class="btn btn-outline btn-sm" onclick="sortSandboxes('name')">Name &#8593;</button>
+      <button class="btn btn-outline btn-sm" onclick="sortSandboxes('agent')">Agent &#8593;</button>
+      <button class="btn btn-outline btn-sm" onclick="sortSandboxes('status')">Status &#8593;</button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th onclick="sortSandboxes('name')">Name <span class="sort-arrow">&#8595;</span></th>
+          <th onclick="sortSandboxes('agent')">Agent <span class="sort-arrow">&#8595;</span></th>
+          <th onclick="sortSandboxes('ws')">Workspace</th>
+          <th onclick="sortSandboxes('status')">Status <span class="sort-arrow">&#8595;</span></th>
+          <th onclick="sortSandboxes('added')">Created</th>
+          <th class="actions">Actions</th>
+        </tr></thead>
+        <tbody id="sbTableBody">
+          <!-- filled by JS -->
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ── POLICY ── -->
+  <section id="page-policy" style="display:none">
+    <div class="page-hdr"><h2>Network Policy</h2></div>
+    <div style="display:grid;grid-template-columns:1.5fr 1fr;gap:1.25rem">
+      <div class="card">
+        <h3>Policy Rules <small id="policyCountPolished" style="font-weight:400;color:var(--text-muted)">(6)</small></h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>ID</th><th>Decision</th><th>Resources</th><th>Scope</th><th>Status</th><th></th></tr></thead>
+            <tbody>
+              <tr><td><code>4ed5dcac</code></td><td><span class="badge badge-ok">ALLOW</span></td><td>api.anthropic.com:443</td><td>Global</td><td><span class="badge badge-ok">Active</span></td><td class="actions"><button class="btn btn-danger btn-sm" onclick="showToast('Rule removed','success')">&#10005;</button></td></tr>
+              <tr><td><code>a7905970</code></td><td><span class="badge badge-ok">ALLOW</span></td><td>*.npmjs.org:443</td><td>Global</td><td><span class="badge badge-ok">Active</span></td><td class="actions"><button class="btn btn-danger btn-sm" onclick="showToast('Rule removed','success')">&#10005;</button></td></tr>
+              <tr><td><code>54afaa9f</code></td><td><span class="badge badge-err">DENY</span></td><td>ads.example.com:443</td><td>Global</td><td><span class="badge badge-ok">Active</span></td><td class="actions"><button class="btn btn-danger btn-sm" onclick="showToast('Rule removed','success')">&#10005;</button></td></tr>
+              <tr><td><code>8f1d2e3b</code></td><td><span class="badge badge-ok">ALLOW</span></td><td>internal.service:443</td><td>dev-agent</td><td><span class="badge badge-ok">Active</span></td><td class="actions"><button class="btn btn-danger btn-sm" onclick="showToast('Rule removed','success')">&#10005;</button></td></tr>
+              <tr><td><code>c6a9b4e7</code></td><td><span class="badge badge-ok">ALLOW</span></td><td>api.github.com:443</td><td>code-reviewer</td><td><span class="badge badge-warn">Inactive</span></td><td class="actions"><button class="btn btn-danger btn-sm" onclick="showToast('Rule removed','success')">&#10005;</button></td></tr>
+              <tr><td><code>f3e2d1c0</code></td><td><span class="badge badge-err">DENY</span></td><td>malware.test:443</td><td>Global</td><td><span class="badge badge-ok">Active</span></td><td class="actions"><button class="btn btn-danger btn-sm" onclick="showToast('Rule removed','success')">&#10005;</button></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div style="margin-top:1rem">
+          <button class="btn btn-outline btn-sm" onclick="showToast('Setup check: not needed','success')">Check Setup</button>
+          <span style="margin-left:0.75rem;font-size:0.75rem;color:var(--text-muted)">Policy already configured &#10003;</span>
+        </div>
+      </div>
+      <div>
+        <div class="accordion open">
+          <div class="accordion-hdr" onclick="this.parentNode.classList.toggle('open')">
+            <span>Allow Rule</span><span class="chevron">&#9660;</span>
+          </div>
+          <div class="accordion-body">
+            <div class="form-group"><label>Resources (host:port)</label><input placeholder="api.example.com:443"></div>
+            <div class="form-group"><label>Scope (sandbox name, optional)</label><input placeholder="my-sandbox"></div>
+            <button class="btn btn-primary btn-sm" onclick="showToast('Allow rule added','success')">Add Allow</button>
+          </div>
+        </div>
+        <div class="accordion">
+          <div class="accordion-hdr" onclick="this.parentNode.classList.toggle('open')">
+            <span>Deny Rule</span><span class="chevron">&#9660;</span>
+          </div>
+          <div class="accordion-body">
+            <div class="form-group"><label>Resources (host:port)</label><input placeholder="badhost.com:443"></div>
+            <button class="btn btn-danger btn-sm" onclick="showToast('Deny rule added','success')">Add Deny</button>
+          </div>
+        </div>
+        <div class="accordion">
+          <div class="accordion-hdr" onclick="this.parentNode.classList.toggle('open')">
+            <span>Remove by Resource</span><span class="chevron">&#9660;</span>
+          </div>
+          <div class="accordion-body">
+            <div class="form-group"><label>Resource</label><input placeholder="api.example.com:443"></div>
+            <button class="btn btn-outline btn-sm" onclick="showToast('Rule removed by resource','success')">Remove</button>
+          </div>
+        </div>
+        <div class="accordion">
+          <div class="accordion-hdr" onclick="this.parentNode.classList.toggle('open')">
+            <span>Remove by ID</span><span class="chevron">&#9660;</span>
+          </div>
+          <div class="accordion-body">
+            <div class="form-group"><label>Rule UUID</label><input placeholder="4ed5dcac-..."></div>
+            <button class="btn btn-outline btn-sm" onclick="showToast('Rule removed by ID','success')">Remove</button>
+          </div>
+        </div>
+        <div class="accordion">
+          <div class="accordion-hdr" onclick="this.parentNode.classList.toggle('open')">
+            <span>Default Policy Preset</span><span class="chevron">&#9660;</span>
+          </div>
+          <div class="accordion-body">
+            <div class="form-group">
+              <select><option>balanced</option><option>allow-all</option><option>deny-all</option></select>
+            </div>
+            <button class="btn btn-primary btn-sm" onclick="showToast('Default policy set to balanced','success')">Apply</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── TEMPLATES ── -->
+  <section id="page-templates" style="display:none">
+    <div class="page-hdr"><h2>Templates <small>(5)</small></h2></div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>ID</th><th>Repository</th><th>Tag</th><th>Flavor</th><th>Size</th><th>Created</th></tr></thead>
+        <tbody>
+          <tr><td><code>4af12422e66e</code></td><td>containifyci/claude-code</td><td>latest</td><td>claude-code</td><td>1.2 GB</td><td>2025-04-01</td></tr>
+          <tr><td><code>8bf2a1c44d77</code></td><td>containifyci/codex</td><td>latest</td><td>codex</td><td>980 MB</td><td>2025-04-01</td></tr>
+          <tr><td><code>3c5e9b12a8f0</code></td><td>containifyci/gemini</td><td>latest</td><td>gemini</td><td>1.1 GB</td><td>2025-03-28</td></tr>
+          <tr><td><code>7d1f8e3a2b5c</code></td><td>containifyci/shell</td><td>latest</td><td>shell</td><td>450 MB</td><td>2025-03-20</td></tr>
+          <tr><td><code>9a4b2c6d8e0f</code></td><td>containifyci/agentic</td><td>beta</td><td>agentic</td><td>1.5 GB</td><td>2025-04-10</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ── CONNECTION ── -->
+  <section id="page-connection" style="display:none">
+    <div class="page-hdr"><h2>Connection</h2></div>
+    <div class="card">
+      <h3>Socket Information</h3>
+      <table style="width:100%;font-size:0.85rem;border:none">
+        <tr><td style="padding:0.5rem 0;border:none;color:var(--text-muted)">Socket Path</td><td style="padding:0.5rem 0;border:none"><code style="background:var(--bg-content);padding:0.2rem 0.5rem;border-radius:4px;font-size:0.8rem">/run/sandboxd/sandboxd.sock</code></td></tr>
+        <tr><td style="padding:0.5rem 0;border:none;color:var(--text-muted)">Daemon Reachable</td><td style="padding:0.5rem 0;border:none"><span class="badge badge-ok">Yes</span></td></tr>
+        <tr><td style="padding:0.5rem 0;border:none;color:var(--text-muted)">Response Time</td><td style="padding:0.5rem 0;border:none">3.2 ms</td></tr>
+        <tr><td style="padding:0.5rem 0;border:none;color:var(--text-muted)">OS Detection</td><td style="padding:0.5rem 0;border:none">Linux</td></tr>
+      </table>
+    </div>
+  </section>
+</main>
+
+<!-- Drawer overlay + drawer -->
+<div class="drawer-overlay" id="drawerOverlay" onclick="closeDrawer()"></div>
+<div class="drawer" id="drawer">
+  <div class="drawer-hdr">
+    <h3>Create Sandbox</h3>
+    <button class="drawer-close" onclick="closeDrawer()">&times;</button>
+  </div>
+  <div class="drawer-body">
+    <div class="form-group"><label>Runtime Name</label><input placeholder="my-sandbox"></div>
+    <div class="form-row">
+      <div class="form-group"><label>Agent</label><select><option>shell</option><option>claude</option><option selected>codex</option><option>gemini</option></select></div>
+      <div class="form-group"><label>Pull Policy</label><select><option value="">Default</option><option>always</option><option>missing</option></select></div>
+    </div>
+    <div class="form-group"><label>Workspace Dir</label><input placeholder="/home/user/projects/my-project"></div>
+    <div class="form-group"><label>Profile</label><input placeholder="Optional kit/profile template"></div>
+    <div class="checkbox-group">
+      <input type="checkbox" id="detachedPol"><label for="detachedPol">Start detached (no attach)</label>
+    </div>
+    <button class="btn btn-primary" style="width:100%;margin-top:0.5rem" onclick="showToast('Sandbox created','success');closeDrawer()">Create Sandbox</button>
+  </div>
+</div>
+
+<!-- Toast container -->
+<div class="toast-container" id="toastContainer"></div>
+
+<script>
+  // ── Mock sandbox data ──
+  const sandboxes = [
+    { ID:'a1b2c3d4-e5f6-7890-abcd-ef1234567890', Spec:{RuntimeName:'dev-agent',AgentName:'claude',WorkspaceDir:'/home/user/projects/app',Detached:false,PullPolicy:''}, State:{Running:true} },
+    { ID:'b2c3d4e5-f6a7-8901-bcde-f12345678901', Spec:{RuntimeName:'code-reviewer',AgentName:'codex',WorkspaceDir:'/home/user/projects/code-review',Detached:true,PullPolicy:'missing'}, State:{Running:true} },
+    { ID:'c3d4e5f6-a7b8-9012-cdef-123456789012', Spec:{RuntimeName:'shell-sandbox',AgentName:'shell',WorkspaceDir:'/tmp/sbx-shell',Detached:false,PullPolicy:'always'}, State:{Running:false} },
+    { ID:'d4e5f6a7-b8c9-0123-defa-234567890123', Spec:{RuntimeName:'gemini-test',AgentName:'gemini',WorkspaceDir:'/home/user/projects/ai-test',Detached:false,PullPolicy:''}, State:{Running:true} },
+  ];
+  let sbSortField = 'name';
+  let sbSortDir = 1;
+
+  // ── Page switching ──
+  document.querySelectorAll('.sidebar-nav a').forEach(a => {
+    a.addEventListener('click', function(e) {
+      e.preventDefault();
+      document.querySelectorAll('.sidebar-nav a').forEach(x => x.classList.remove('active'));
+      this.classList.add('active');
+      document.querySelectorAll('.content > section').forEach(s => s.style.display = 'none');
+      const page = document.getElementById('page-' + this.dataset.page);
+      if (page) page.style.display = 'block';
+    });
+  });
+
+  // ── Sandbox table ──
+  function renderSandboxes() {
+    const q = (document.getElementById('sbSearch').value || '').toLowerCase();
+    let filtered = sandboxes.filter(s => {
+      const spec = s.Spec || {};
+      return spec.RuntimeName.toLowerCase().includes(q) ||
+             spec.AgentName.toLowerCase().includes(q) ||
+             spec.WorkspaceDir.toLowerCase().includes(q);
+    });
+    filtered.sort((a,b) => {
+      let va, vb;
+      if (sbSortField === 'name') { va = a.Spec.RuntimeName; vb = b.Spec.RuntimeName; }
+      else if (sbSortField === 'agent') { va = a.Spec.AgentName; vb = b.Spec.AgentName; }
+      else if (sbSortField === 'status') { va = a.State.Running ? 1 : 0; vb = b.State.Running ? 1 : 0; }
+      else { va = a.Spec.RuntimeName; vb = b.Spec.RuntimeName; }
+      if (typeof va === 'string') return sbSortDir * va.localeCompare(vb);
+      return sbSortDir * (va - vb);
+    });
+    document.getElementById('sbCountPolished').textContent = '(' + filtered.length + ')';
+    const tbody = document.getElementById('sbTableBody');
+    tbody.innerHTML = filtered.map(s => {
+      const spec = s.Spec || {}; const state = s.State || {};
+      const running = state.Running === true;
+      return `<tr>
+        <td><strong>${spec.RuntimeName}</strong></td>
+        <td>${spec.AgentName}</td>
+        <td><span style="font-size:0.75rem;color:var(--text-muted)">${spec.WorkspaceDir}</span></td>
+        <td><span class="badge ${running ? 'badge-ok' : 'badge-err'}">${running ? 'Running' : 'Stopped'}</span></td>
+        <td style="font-size:0.75rem;color:var(--text-muted)">${running ? '2h ago' : '3h ago'}</td>
+        <td class="actions">
+          <button class="btn btn-danger btn-sm" onclick="showToast('Sandbox deleted','success')">Delete</button>
+        </td>
+      </tr>`;
+    }).join('');
+  }
+
+  function filterSandboxes() { renderSandboxes(); }
+  function sortSandboxes(field) {
+    if (sbSortField === field) sbSortDir *= -1;
+    else { sbSortField = field; sbSortDir = 1; }
+    renderSandboxes();
+  }
+
+  // ── Drawer ──
+  function openDrawer() { document.getElementById('drawer').classList.add('active'); document.getElementById('drawerOverlay').classList.add('active'); }
+  function closeDrawer() { document.getElementById('drawer').classList.remove('active'); document.getElementById('drawerOverlay').classList.remove('active'); }
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDrawer(); });
+
+  // ── Toast ──
+  function showToast(msg, type) {
+    const c = document.getElementById('toastContainer');
+    const t = document.createElement('div');
+    t.className = 'toast ' + type;
+    t.textContent = msg;
+    c.appendChild(t);
+    setTimeout(() => { t.style.opacity = '0'; t.style.transition = 'opacity 0.3s'; setTimeout(() => t.remove(), 300); }, 3000);
+  }
+
+  // ── Init ──
+  renderSandboxes();
+</script>
+</body>
+</html>

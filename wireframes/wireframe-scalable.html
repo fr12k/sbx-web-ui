@@ -1,0 +1,816 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sandbox Manager — Scalable</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg-body: #0d1117;
+    --bg-nav: #161b22;
+    --bg-card: #161b22;
+    --bg-hover: #1c2333;
+    --bg-active: #1f2937;
+    --bg-input: #0d1117;
+    --border: #30363d;
+    --accent: #58a6ff;
+    --accent-hover: #79c0ff;
+    --text-primary: #c9d1d9;
+    --text-secondary: #8b949e;
+    --text-muted: #484f58;
+    --success: #3fb950;
+    --danger: #f85149;
+    --warning: #d29922;
+    --radius: 8px;
+    --radius-sm: 6px;
+    --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif;
+    --mono: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+    --transition: 0.15s ease;
+  }
+  html, body { height: 100%; }
+  body {
+    font-family: var(--font);
+    background: var(--bg-body);
+    color: var(--text-primary);
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  /* ── Top nav ── */
+  .topnav {
+    background: var(--bg-nav);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 1.25rem;
+    height: 48px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    gap: 0.125rem;
+  }
+  .topnav-brand {
+    font-weight: 700;
+    font-size: 0.95rem;
+    color: var(--text-primary);
+    margin-right: 1.5rem;
+    white-space: nowrap;
+  }
+  .topnav-brand span { color: var(--accent); }
+  .topnav a {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.35rem 0.85rem;
+    color: var(--text-secondary);
+    text-decoration: none;
+    font-size: 0.8rem;
+    font-weight: 500;
+    border-radius: var(--radius-sm);
+    transition: all var(--transition);
+    cursor: pointer;
+    height: 32px;
+    white-space: nowrap;
+  }
+  .topnav a:hover { color: var(--text-primary); background: var(--bg-hover); }
+  .topnav a.active { color: var(--accent); background: var(--bg-active); }
+  .topnav-right { margin-left: auto; display: flex; align-items: center; gap: 0.5rem; }
+  .topnav-right .btn { height: 32px; }
+  .topnav .shortcut-hint {
+    font-size: 0.65rem;
+    color: var(--text-muted);
+    background: var(--bg-body);
+    padding: 0.1rem 0.35rem;
+    border-radius: 3px;
+    margin-left: 0.25rem;
+  }
+
+  /* ── Main content ── */
+  .main { padding: 1rem 1.25rem; max-width: 1440px; margin: 0 auto; }
+
+  /* ── Buttons ── */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.4rem 0.85rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: 0.8rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all var(--transition);
+    font-family: var(--font);
+    background: transparent;
+    color: var(--text-secondary);
+  }
+  .btn:hover { border-color: var(--text-muted); color: var(--text-primary); }
+  .btn-primary { background: #238636; border-color: rgba(240,246,252,0.1); color: #fff; }
+  .btn-primary:hover { background: #2ea043; }
+  .btn-danger { color: var(--danger); border-color: rgba(248,81,73,0.3); }
+  .btn-danger:hover { background: rgba(248,81,73,0.1); border-color: var(--danger); }
+  .btn-sm { padding: 0.25rem 0.55rem; font-size: 0.7rem; }
+  .btn-icon { padding: 0.35rem; min-width: 32px; justify-content: center; }
+
+  /* ── Stats bar ── */
+  .stats {
+    display: flex;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+  }
+  .stat {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.6rem 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    font-size: 0.8rem;
+  }
+  .stat .num { font-size: 1.3rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .stat .label { color: var(--text-secondary); font-size: 0.7rem; }
+
+  /* ── Toolbar ── */
+  .toolbar {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+    flex-wrap: wrap;
+  }
+  .toolbar input[type="search"] {
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 0.35rem 0.65rem;
+    color: var(--text-primary);
+    font-size: 0.8rem;
+    font-family: var(--font);
+    flex: 1;
+    min-width: 180px;
+    outline: none;
+  }
+  .toolbar input[type="search"]:focus { border-color: var(--accent); }
+  .toolbar .sep { width: 1px; height: 24px; background: var(--border); }
+  .density-btn.active { background: var(--bg-active); color: var(--accent); border-color: var(--accent); }
+
+  /* ── Floating bulk bar ── */
+  .bulk-bar {
+    display: none;
+    position: fixed;
+    bottom: 1rem;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--bg-card);
+    border: 1px solid var(--accent);
+    border-radius: var(--radius);
+    padding: 0.6rem 1.25rem;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.6);
+    z-index: 200;
+    align-items: center;
+    gap: 0.75rem;
+    font-size: 0.8rem;
+  }
+  .bulk-bar.active { display: flex; }
+
+  /* ── Table ── */
+  .table-container {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    background: var(--bg-card);
+  }
+  .table-wrap { overflow-x: auto; }
+  table.data-grid {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.78rem;
+  }
+  table.data-grid thead { position: sticky; top: 0; z-index: 2; }
+  table.data-grid th {
+    background: var(--bg-nav);
+    padding: 0.45rem 0.65rem;
+    font-weight: 600;
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+    cursor: pointer;
+    user-select: none;
+    text-align: left;
+  }
+  table.data-grid th:hover { color: var(--text-secondary); }
+  table.data-grid th .sort-icon { display: inline-block; margin-left: 0.2rem; opacity: 0; font-size: 0.65rem; }
+  table.data-grid th.sorted .sort-icon { opacity: 0.7; color: var(--accent); }
+  table.data-grid th .col-toggle { float: right; opacity: 0.3; cursor: pointer; }
+  table.data-grid th .col-toggle:hover { opacity: 0.7; }
+  table.data-grid td {
+    padding: 0.4rem 0.65rem;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-secondary);
+    white-space: nowrap;
+  }
+  table.data-grid tr:last-child td { border-bottom: none; }
+  table.data-grid tr:hover td { background: var(--bg-hover); }
+  table.data-grid tr.selected td { background: rgba(88,166,255,0.08); }
+  table.data-grid td .badge {
+    display: inline-block;
+    padding: 0.1rem 0.45rem;
+    border-radius: 999px;
+    font-size: 0.65rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+  .badge-ok { background: rgba(63,185,80,0.15); color: var(--success); }
+  .badge-err { background: rgba(248,81,73,0.15); color: var(--danger); }
+  .badge-warn { background: rgba(210,153,34,0.15); color: var(--warning); }
+  table.data-grid td.actions { text-align: right; }
+  table.data-grid td code { font-family: var(--mono); font-size: 0.7rem; }
+
+  /* Row density */
+  table.data-grid.compact td { padding: 0.25rem 0.55rem; font-size: 0.72rem; }
+  table.data-grid.compact th { padding: 0.3rem 0.55rem; }
+  table.data-grid.comfortable td { padding: 0.55rem 0.75rem; font-size: 0.82rem; }
+  table.data-grid.comfortable th { padding: 0.55rem 0.75rem; }
+
+  /* Table footer / pagination */
+  .table-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem 0.75rem;
+    border-top: 1px solid var(--border);
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  .table-footer select {
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    color: var(--text-primary);
+    padding: 0.15rem 0.4rem;
+    font-size: 0.75rem;
+  }
+  .pagination { display: flex; align-items: center; gap: 0.25rem; }
+  .pagination .page-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 28px;
+    height: 28px;
+    padding: 0 0.35rem;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 0.75rem;
+    cursor: pointer;
+    transition: all var(--transition);
+  }
+  .pagination .page-btn:hover { border-color: var(--text-muted); color: var(--text-primary); }
+  .pagination .page-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .pagination .page-btn:disabled { opacity: 0.4; cursor: default; }
+
+  /* ── Column visibility dropdown ── */
+  .col-dropdown {
+    position: relative;
+    display: inline-block;
+  }
+  .col-dropdown-menu {
+    display: none;
+    position: absolute;
+    top: 100%;
+    right: 0;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 0.5rem;
+    z-index: 50;
+    min-width: 160px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+  }
+  .col-dropdown-menu.open { display: block; }
+  .col-dropdown-menu label {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.25rem 0.4rem;
+    font-size: 0.75rem;
+    cursor: pointer;
+    border-radius: 3px;
+  }
+  .col-dropdown-menu label:hover { background: var(--bg-hover); }
+  .col-dropdown-menu input[type="checkbox"] { accent-color: var(--accent); }
+
+  /* ── Modal ── */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.6);
+    z-index: 300;
+    align-items: center;
+    justify-content: center;
+  }
+  .modal-overlay.active { display: flex; }
+  .modal {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    width: 100%;
+    max-width: 520px;
+    max-height: 85vh;
+    overflow-y: auto;
+    box-shadow: 0 16px 48px rgba(0,0,0,0.6);
+  }
+  .modal-hdr {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid var(--border);
+  }
+  .modal-hdr h3 { font-size: 1rem; font-weight: 600; }
+  .modal-close { background: none; border: none; color: var(--text-muted); font-size: 1.3rem; cursor: pointer; padding: 0.25rem; }
+  .modal-close:hover { color: var(--text-primary); }
+  .modal-body { padding: 1.25rem; }
+  .modal-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 1rem;
+    gap: 0;
+  }
+  .modal-tabs button {
+    padding: 0.5rem 1rem;
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all var(--transition);
+    font-family: var(--font);
+  }
+  .modal-tabs button.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .modal-tab-panel { display: none; }
+  .modal-tab-panel.active { display: block; }
+  .form-group { margin-bottom: 0.85rem; }
+  .form-group label { display: block; font-size: 0.72rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 0.25rem; }
+  .form-group input, .form-group select {
+    width: 100%;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 0.4rem 0.65rem;
+    color: var(--text-primary);
+    font-size: 0.85rem;
+    font-family: var(--font);
+    outline: none;
+  }
+  .form-group input:focus, .form-group select:focus { border-color: var(--accent); }
+  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+
+  /* ── Shortcuts modal ── */
+  .shortcuts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.4rem; }
+  .shortcuts-grid kbd {
+    display: inline-block;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 0.1rem 0.4rem;
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    color: var(--text-primary);
+  }
+
+  /* ── Section pages ── */
+  .section-page { display: none; }
+  .section-page.active { display: block; }
+
+  @media (max-width: 768px) {
+    .topnav a span.nav-label { display: none; }
+    .main { padding: 0.75rem; }
+    .stats { flex-direction: column; }
+    .toolbar { flex-direction: column; align-items: stretch; }
+    .toolbar .sep { display: none; }
+    .pagination .page-btn { min-width: 24px; height: 24px; font-size: 0.65rem; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Top Nav -->
+<nav class="topnav">
+  <div class="topnav-brand"><span>SBX</span> Manager</div>
+  <a class="active" data-section="sandboxes"><span class="nav-label">Sandboxes</span> <span class="shortcut-hint">Ctrl+1</span></a>
+  <a data-section="policy"><span class="nav-label">Policy</span> <span class="shortcut-hint">Ctrl+2</span></a>
+  <a data-section="templates"><span class="nav-label">Templates</span> <span class="shortcut-hint">Ctrl+3</span></a>
+  <a data-section="connection"><span class="nav-label">Connection</span> <span class="shortcut-hint">Ctrl+4</span></a>
+  <div class="topnav-right">
+    <span style="font-size:0.7rem;color:var(--text-muted)"><span style="color:var(--success);font-weight:700">&#9679;</span> sandboxd v0.30.0</span>
+    <button class="btn btn-primary btn-sm" onclick="openModal('createModal')">+ New Sandbox <span class="shortcut-hint">Ctrl+N</span></button>
+    <button class="btn btn-icon btn-sm" onclick="openModal('shortcutsModal')" title="Keyboard shortcuts">?</button>
+  </div>
+</nav>
+
+<main class="main">
+
+  <!-- ── SANDBOXES SECTION ── -->
+  <div class="section-page active" id="section-sandboxes">
+    <div class="stats">
+      <div class="stat"><span class="num" id="totalCount">12</span><span class="label">Total</span></div>
+      <div class="stat"><span class="num" style="color:var(--success)">8</span><span class="label">Running</span></div>
+      <div class="stat"><span class="num" style="color:var(--text-muted)">4</span><span class="label">Stopped</span></div>
+      <div class="stat"><span class="num" style="color:var(--accent)">5</span><span class="label">Templates</span></div>
+    </div>
+
+    <div class="toolbar">
+      <input type="search" id="sbSearchScalable" placeholder="Search sandboxes… (Ctrl+F)" oninput="filterTable()">
+      <div class="sep"></div>
+      <button class="btn btn-sm density-btn active" data-density="default" onclick="setDensity('default')">Default</button>
+      <button class="btn btn-sm density-btn" data-density="compact" onclick="setDensity('compact')">Compact</button>
+      <button class="btn btn-sm density-btn" data-density="comfortable" onclick="setDensity('comfortable')">Comfort</button>
+      <div class="sep"></div>
+      <div class="col-dropdown">
+        <button class="btn btn-sm" onclick="document.getElementById('colMenu').classList.toggle('open')">Columns &#9660;</button>
+        <div class="col-dropdown-menu" id="colMenu">
+          <label><input type="checkbox" checked data-col="0" onchange="toggleCol(this,0)"> #</label>
+          <label><input type="checkbox" checked data-col="1" onchange="toggleCol(this,1)"> Name</label>
+          <label><input type="checkbox" checked data-col="2" onchange="toggleCol(this,2)"> Agent</label>
+          <label><input type="checkbox" checked data-col="3" onchange="toggleCol(this,3)"> Workspace</label>
+          <label><input type="checkbox" checked data-col="4" onchange="toggleCol(this,4)"> Status</label>
+          <label><input type="checkbox" data-col="5" onchange="toggleCol(this,5)"> Socket</label>
+          <label><input type="checkbox" data-col="6" onchange="toggleCol(this,6)"> Network</label>
+          <label><input type="checkbox" checked data-col="7" onchange="toggleCol(this,7)"> Actions</label>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bulk action bar -->
+    <div class="bulk-bar" id="bulkBar">
+      <span id="bulkCount">0 selected</span>
+      <button class="btn btn-danger btn-sm" onclick="showToast('Deleting 0 selected…','error')">Delete Selected</button>
+      <button class="btn btn-sm" onclick="clearSelection()">Clear</button>
+    </div>
+
+    <div class="table-container">
+      <div class="table-wrap">
+        <table class="data-grid" id="sandboxGrid">
+          <thead><tr>
+            <th style="width:32px"><input type="checkbox" id="selectAll" onchange="toggleAll(this)"></th>
+            <th data-sort="id" onclick="sortBy('id')">ID <span class="sort-icon">&#9650;</span></th>
+            <th data-sort="name" onclick="sortBy('name')" class="sorted">Name <span class="sort-icon">&#9650;</span></th>
+            <th data-sort="agent" onclick="sortBy('agent')">Agent <span class="sort-icon">&#9650;</span></th>
+            <th data-sort="ws" onclick="sortBy('ws')">Workspace <span class="sort-icon">&#9650;</span></th>
+            <th data-sort="status" onclick="sortBy('status')" style="width:80px">Status <span class="sort-icon">&#9650;</span></th>
+            <th data-col-hide="5" style="display:none" data-sort="socket">Socket <span class="sort-icon">&#9650;</span></th>
+            <th data-col-hide="6" style="display:none" data-sort="net">Network <span class="sort-icon">&#9650;</span></th>
+            <th style="width:80px">Actions</th>
+          </tr></thead>
+          <tbody id="gridBody"></tbody>
+        </table>
+      </div>
+      <div class="table-footer">
+        <div style="display:flex;align-items:center;gap:0.5rem">
+          <span id="showingLabel">Showing 1-10 of 12</span>
+          <select id="perPageSelect" onchange="renderTable()">
+            <option value="10">10/page</option><option value="25">25/page</option><option value="50">50/page</option>
+          </select>
+        </div>
+        <div class="pagination" id="pagination"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── POLICY SECTION ── -->
+  <div class="section-page" id="section-policy">
+    <h2 style="font-size:1.1rem;margin-bottom:0.75rem">Network Policy Rules <span style="font-weight:400;font-size:0.8rem;color:var(--text-muted)">(6 rules)</span></h2>
+    <div class="toolbar" style="margin-bottom:0.5rem">
+      <input type="search" placeholder="Filter rules…" style="background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius-sm);padding:0.35rem 0.65rem;color:var(--text-primary);font-size:0.8rem;flex:1;min-width:180px;outline:none">
+    </div>
+    <div class="table-container">
+      <div class="table-wrap">
+        <table class="data-grid">
+          <thead><tr><th>ID</th><th>Decision</th><th>Resources</th><th>Scope</th><th>Status</th><th></th></tr></thead>
+          <tbody>
+            <tr><td><code>4ed5dcac</code></td><td><span class="badge badge-ok">ALLOW</span></td><td>api.anthropic.com:443</td><td>Global</td><td><span class="badge badge-ok">Active</span></td><td class="actions"><button class="btn btn-danger btn-sm">&#10005;</button></td></tr>
+            <tr><td><code>a7905970</code></td><td><span class="badge badge-ok">ALLOW</span></td><td>*.npmjs.org:443</td><td>Global</td><td><span class="badge badge-ok">Active</span></td><td class="actions"><button class="btn btn-danger btn-sm">&#10005;</button></td></tr>
+            <tr><td><code>54afaa9f</code></td><td><span class="badge badge-err">DENY</span></td><td>ads.example.com:443</td><td>Global</td><td><span class="badge badge-ok">Active</span></td><td class="actions"><button class="btn btn-danger btn-sm">&#10005;</button></td></tr>
+            <tr><td><code>8f1d2e3b</code></td><td><span class="badge badge-ok">ALLOW</span></td><td>internal.service:443</td><td>dev-agent</td><td><span class="badge badge-ok">Active</span></td><td class="actions"><button class="btn btn-danger btn-sm">&#10005;</button></td></tr>
+            <tr><td><code>c6a9b4e7</code></td><td><span class="badge badge-ok">ALLOW</span></td><td>api.github.com:443</td><td>code-reviewer</td><td><span class="badge badge-warn">Inactive</span></td><td class="actions"><button class="btn btn-danger btn-sm">&#10005;</button></td></tr>
+            <tr><td><code>f3e2d1c0</code></td><td><span class="badge badge-err">DENY</span></td><td>malware.test:443</td><td>Global</td><td><span class="badge badge-ok">Active</span></td><td class="actions"><button class="btn btn-danger btn-sm">&#10005;</button></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="table-footer">
+        <span>6 rules</span>
+        <div class="pagination"><span class="page-btn active">1</span></div>
+      </div>
+    </div>
+    <div style="display:flex;gap:0.75rem;margin-top:1rem;flex-wrap:wrap">
+      <button class="btn btn-primary btn-sm" onclick="showToast('Allow rule added','success')">+ Allow Rule</button>
+      <button class="btn btn-danger btn-sm" onclick="showToast('Deny rule added','success')">+ Deny Rule</button>
+      <button class="btn btn-sm" onclick="showToast('Setup check complete','success')">Check Setup</button>
+    </div>
+  </div>
+
+  <!-- ── TEMPLATES SECTION ── -->
+  <div class="section-page" id="section-templates">
+    <h2 style="font-size:1.1rem;margin-bottom:0.75rem">Templates <span style="font-weight:400;font-size:0.8rem;color:var(--text-muted)">(5)</span></h2>
+    <div class="table-container">
+      <div class="table-wrap">
+        <table class="data-grid">
+          <thead><tr><th>ID</th><th>Repository</th><th>Tag</th><th>Flavor</th><th>Size</th><th>Created</th></tr></thead>
+          <tbody>
+            <tr><td><code>4af12422e66e</code></td><td>containifyci/claude-code</td><td>latest</td><td>claude-code</td><td>1.2 GB</td><td>2025-04-01</td></tr>
+            <tr><td><code>8bf2a1c44d77</code></td><td>containifyci/codex</td><td>latest</td><td>codex</td><td>980 MB</td><td>2025-04-01</td></tr>
+            <tr><td><code>3c5e9b12a8f0</code></td><td>containifyci/gemini</td><td>latest</td><td>gemini</td><td>1.1 GB</td><td>2025-03-28</td></tr>
+            <tr><td><code>7d1f8e3a2b5c</code></td><td>containifyci/shell</td><td>latest</td><td>shell</td><td>450 MB</td><td>2025-03-20</td></tr>
+            <tr><td><code>9a4b2c6d8e0f</code></td><td>containifyci/agentic</td><td>beta</td><td>agentic</td><td>1.5 GB</td><td>2025-04-10</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── CONNECTION SECTION ── -->
+  <div class="section-page" id="section-connection">
+    <h2 style="font-size:1.1rem;margin-bottom:0.75rem">Connection</h2>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:1rem">
+      <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:1rem">
+        <table style="width:100%;border:none;font-size:0.85rem">
+          <tr><td style="padding:0.4rem 0;border:none;color:var(--text-muted)">Socket Path</td><td style="padding:0.4rem 0;border:none"><code style="background:var(--bg-input);padding:0.15rem 0.4rem;border-radius:3px;font-size:0.75rem">/run/sandboxd/sandboxd.sock</code></td></tr>
+          <tr><td style="padding:0.4rem 0;border:none;color:var(--text-muted)">Daemon</td><td style="padding:0.4rem 0;border:none"><span class="badge badge-ok">Reachable (3ms)</span></td></tr>
+          <tr><td style="padding:0.4rem 0;border:none;color:var(--text-muted)">OS</td><td style="padding:0.4rem 0;border:none">Linux</td></tr>
+        </table>
+      </div>
+    </div>
+  </div>
+</main>
+
+<!-- Create Sandbox Modal -->
+<div class="modal-overlay" id="createModal" onclick="if(event.target===this)closeModal('createModal')">
+  <div class="modal">
+    <div class="modal-hdr">
+      <h3>Create Sandbox</h3>
+      <button class="modal-close" onclick="closeModal('createModal')">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="modal-tabs">
+        <button class="active" data-tab="basic" onclick="switchModalTab(this,'basic')">Basic</button>
+        <button data-tab="advanced" onclick="switchModalTab(this,'advanced')">Advanced</button>
+        <button data-tab="network" onclick="switchModalTab(this,'network')">Network</button>
+      </div>
+      <div class="modal-tab-panel active" id="tab-basic">
+        <div class="form-group"><label>Runtime Name *</label><input placeholder="my-sandbox" value="prod-agent-1"></div>
+        <div class="form-group"><label>Agent *</label><select><option>shell</option><option selected>claude</option><option>codex</option><option>gemini</option></select></div>
+        <div class="form-group"><label>Workspace Dir *</label><input placeholder="/home/user/projects" value="/home/user/projects/app"></div>
+      </div>
+      <div class="modal-tab-panel" id="tab-advanced">
+        <div class="form-group"><label>Profile</label><input placeholder="Kit/profile template"></div>
+        <div class="form-row">
+          <div class="form-group"><label>Pull Policy</label><select><option value="">Default</option><option>always</option><option>missing</option></select></div>
+          <div class="form-group" style="display:flex;align-items:flex-end;padding-bottom:0.4rem">
+            <label style="display:flex;align-items:center;gap:0.4rem;cursor:pointer;margin:0"><input type="checkbox"> Start detached</label>
+          </div>
+        </div>
+        <div class="form-group"><label>Additional Workspaces</label><input placeholder="/extra/data:ro, /extra/cache"></div>
+      </div>
+      <div class="modal-tab-panel" id="tab-network">
+        <div class="form-group"><label>Network Name</label><input placeholder="custom-network (leave empty for default)"></div>
+        <p style="font-size:0.75rem;color:var(--text-muted)">Network policy can be configured in the Policy tab after creation.</p>
+      </div>
+      <button class="btn btn-primary" style="width:100%;margin-top:0.75rem" onclick="showToast('Sandbox prod-agent-1 created','success');closeModal('createModal')">Create</button>
+    </div>
+  </div>
+</div>
+
+<!-- Shortcuts Modal -->
+<div class="modal-overlay" id="shortcutsModal" onclick="if(event.target===this)closeModal('shortcutsModal')">
+  <div class="modal" style="max-width:380px">
+    <div class="modal-hdr"><h3>Keyboard Shortcuts</h3><button class="modal-close" onclick="closeModal('shortcutsModal')">&times;</button></div>
+    <div class="modal-body">
+      <div class="shortcuts-grid">
+        <span><kbd>Ctrl</kbd>+<kbd>1</kbd></span><span>Sandboxes</span>
+        <span><kbd>Ctrl</kbd>+<kbd>2</kbd></span><span>Policy</span>
+        <span><kbd>Ctrl</kbd>+<kbd>3</kbd></span><span>Templates</span>
+        <span><kbd>Ctrl</kbd>+<kbd>4</kbd></span><span>Connection</span>
+        <span><kbd>Ctrl</kbd>+<kbd>N</kbd></span><span>New Sandbox</span>
+        <span><kbd>Ctrl</kbd>+<kbd>F</kbd></span><span>Search / Filter</span>
+        <span><kbd>Del</kbd></span><span>Delete selected</span>
+        <span><kbd>Esc</kbd></span><span>Close modal</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="toastContainerScalable" style="position:fixed;bottom:4rem;right:1.25rem;z-index:999;display:flex;flex-direction:column;gap:0.4rem"></div>
+
+<script>
+  // ── Mock data: 12 sandboxes ──
+  const allSandboxes = [
+    { id:'a1b2c3d4-e5f6-7890-abcd-ef1234567890', name:'prod-agent-1', agent:'claude', ws:'/home/user/projects/main', running:true, socket:'/tmp/prod1.sock', net:'sbx-prod' },
+    { id:'b2c3d4e5-f6a7-8901-bcde-f12345678901', name:'prod-agent-2', agent:'codex', ws:'/home/user/projects/api', running:true, socket:'/tmp/prod2.sock', net:'sbx-prod' },
+    { id:'c3d4e5f6-a7b8-9012-cdef-123456789012', name:'dev-shell', agent:'shell', ws:'/home/user/projects/dev', running:false, socket:'/tmp/dev1.sock', net:'sbx-dev' },
+    { id:'d4e5f6a7-b8c9-0123-defa-234567890123', name:'code-reviewer', agent:'codex', ws:'/home/user/projects/reviews', running:true, socket:'/tmp/cr1.sock', net:'sbx-prod' },
+    { id:'e5f6a7b8-c9d0-1234-efab-345678901234', name:'gemini-test', agent:'gemini', ws:'/home/user/projects/ai-test', running:true, socket:'/tmp/gem1.sock', net:'sbx-dev' },
+    { id:'f6a7b8c9-d0e1-2345-fabc-456789012345', name:'staging-backend', agent:'claude', ws:'/opt/staging/backend', running:true, socket:'/tmp/stg1.sock', net:'sbx-staging' },
+    { id:'a7b8c9d0-e1f2-3456-abcd-567890123456', name:'staging-frontend', agent:'shell', ws:'/opt/staging/frontend', running:false, socket:'/tmp/stg2.sock', net:'sbx-staging' },
+    { id:'b8c9d0e1-f2a3-4567-bcde-678901234567', name:'ci-runner-1', agent:'codex', ws:'/tmp/ci/runner1', running:true, socket:'/tmp/ci1.sock', net:'sbx-ci' },
+    { id:'c9d0e1f2-a3b4-5678-cdef-789012345678', name:'ci-runner-2', agent:'codex', ws:'/tmp/ci/runner2', running:true, socket:'/tmp/ci2.sock', net:'sbx-ci' },
+    { id:'d0e1f2a3-b4c5-6789-defa-890123456789', name:'test-e2e', agent:'gemini', ws:'/home/user/projects/e2e', running:false, socket:'/tmp/e2e.sock', net:'sbx-dev' },
+    { id:'e1f2a3b4-c5d6-7890-efab-901234567890', name:'sandbox-alpha', agent:'shell', ws:'/tmp/sbx-alpha', running:true, socket:'/tmp/alpha.sock', net:'sbx-dev' },
+    { id:'f2a3b4c5-d6e7-8901-fabc-012345678901', name:'sandbox-beta', agent:'claude', ws:'/home/user/projects/beta', running:false, socket:'/tmp/beta.sock', net:'sbx-prod' },
+  ];
+  let filtered = [...allSandboxes];
+  let currentPage = 1, perPage = 10, sortField = 'name', sortDir = 1, selected = new Set();
+  let density = 'default';
+
+  // ── Table rendering ──
+  function renderTable() {
+    const q = (document.getElementById('sbSearchScalable').value || '').toLowerCase();
+    filtered = allSandboxes.filter(s => s.name.toLowerCase().includes(q) || s.agent.toLowerCase().includes(q) || s.ws.toLowerCase().includes(q));
+    filtered.sort((a,b) => {
+      let va = a[sortField], vb = b[sortField];
+      if (va === undefined) va = ''; if (vb === undefined) vb = '';
+      if (typeof va === 'string') return sortDir * va.localeCompare(vb);
+      return sortDir * (va - vb);
+    });
+    const total = filtered.length;
+    const pages = Math.ceil(total / perPage) || 1;
+    if (currentPage > pages) currentPage = pages;
+    const start = (currentPage - 1) * perPage;
+    const page = filtered.slice(start, start + perPage);
+    const tbody = document.getElementById('gridBody');
+    const hiddenCols = getHiddenCols();
+    tbody.innerHTML = page.map((s, i) => {
+      const rowNum = start + i + 1;
+      const sel = selected.has(s.id) ? 'selected' : '';
+      const shortId = s.id.substring(0, 8);
+      return `<tr class="${sel}" data-id="${s.id}">
+        <td><input type="checkbox" ${selected.has(s.id)?'checked':''} onchange="toggleRow('${s.id}',this.checked)"></td>
+        <td${hiddenCols.includes(0)?' style="display:none"':''}><code title="${s.id}">${shortId}</code></td>
+        <td${hiddenCols.includes(1)?' style="display:none"':''}><strong>${s.name}</strong></td>
+        <td${hiddenCols.includes(2)?' style="display:none"':''}>${s.agent}</td>
+        <td${hiddenCols.includes(3)?' style="display:none"':''} style="max-width:200px;overflow:hidden;text-overflow:ellipsis">${s.ws}</td>
+        <td${hiddenCols.includes(4)?' style="display:none"':''}><span class="badge ${s.running ? 'badge-ok' : 'badge-err'}">${s.running ? 'Running' : 'Stopped'}</span></td>
+        <td${hiddenCols.includes(5)?' style="display:none"':''}><code>${s.socket}</code></td>
+        <td${hiddenCols.includes(6)?' style="display:none"':''}>${s.net}</td>
+        <td${hiddenCols.includes(7)?' style="display:none"':''} class="actions"><button class="btn btn-danger btn-sm" onclick="showToast('Deleted ${s.name}','success');renderTable()">Delete</button></td>
+      </tr>`;
+    }).join('');
+
+    document.getElementById('totalCount').textContent = total;
+    const end = Math.min(start + perPage, total);
+    document.getElementById('showingLabel').textContent = total > 0 ? `Showing ${start+1}-${end} of ${total}` : 'No results';
+    renderPagination(pages);
+    updateBulkBar();
+    updateSortIcons();
+  }
+
+  function renderPagination(pages) {
+    const el = document.getElementById('pagination');
+    if (pages <= 1) { el.innerHTML = ''; return; }
+    let html = `<button class="page-btn" ${currentPage<=1?'disabled':''} onclick="goPage(${currentPage-1})">&#9664;</button>`;
+    for (let i = Math.max(1, currentPage-2); i <= Math.min(pages, currentPage+2); i++) {
+      html += `<button class="page-btn ${i===currentPage?'active':''}" onclick="goPage(${i})">${i}</button>`;
+    }
+    html += `<button class="page-btn" ${currentPage>=pages?'disabled':''} onclick="goPage(${currentPage+1})">&#9654;</button>`;
+    el.innerHTML = html;
+  }
+
+  function goPage(n) { currentPage = n; renderTable(); }
+
+  function sortBy(field) {
+    if (sortField === field) sortDir *= -1;
+    else { sortField = field; sortDir = 1; }
+    currentPage = 1;
+    renderTable();
+  }
+
+  function updateSortIcons() {
+    document.querySelectorAll('#sandboxGrid th').forEach(th => {
+      th.classList.toggle('sorted', th.dataset.sort === sortField);
+    });
+  }
+
+  function filterTable() { currentPage = 1; renderTable(); }
+
+  function setDensity(d) {
+    density = d;
+    document.querySelectorAll('.density-btn').forEach(b => b.classList.toggle('active', b.dataset.density === d));
+    const grid = document.getElementById('sandboxGrid');
+    grid.classList.remove('compact', 'comfortable');
+    if (d === 'compact') grid.classList.add('compact');
+    if (d === 'comfortable') grid.classList.add('comfortable');
+  }
+
+  // ── Column visibility ──
+  function getHiddenCols() {
+    const r = [];
+    document.querySelectorAll('#colMenu input[type="checkbox"]').forEach(cb => { if (!cb.checked) r.push(parseInt(cb.dataset.col)); });
+    return r;
+  }
+
+  function toggleCol(cb, col) {
+    const index = col; // col 0 = first data column after checkbox
+    document.querySelectorAll(`#sandboxGrid th[data-col-hide="${col}"], #sandboxGrid td:nth-child(${col+2})`).forEach(el => {
+      el.style.display = cb.checked ? '' : 'none';
+    });
+    // also hide td by nth-child
+    document.querySelectorAll(`#sandboxGrid td`).forEach((td, i) => {
+      const cellIndex = td.cellIndex;
+      if (cellIndex === col + 1) { // +1 for checkbox column
+        td.style.display = cb.checked ? '' : 'none';
+      }
+    });
+  }
+
+  // ── Selection ──
+  function toggleRow(id, checked) {
+    if (checked) selected.add(id); else selected.delete(id);
+    renderTable();
+  }
+
+  function toggleAll(cb) {
+    const page = filtered.slice((currentPage-1)*perPage, currentPage*perPage);
+    page.forEach(s => { if (cb.checked) selected.add(s.id); else selected.delete(s.id); });
+    renderTable();
+  }
+
+  function clearSelection() { selected.clear(); renderTable(); }
+  function updateBulkBar() {
+    const bar = document.getElementById('bulkBar');
+    const count = selected.size;
+    document.getElementById('bulkCount').textContent = count + ' selected';
+    bar.classList.toggle('active', count > 0);
+  }
+
+  // ── Modal ──
+  function openModal(id) { document.getElementById(id).classList.add('active'); }
+  function closeModal(id) { document.getElementById(id).classList.remove('active'); }
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') { document.querySelectorAll('.modal-overlay.active').forEach(m => m.classList.remove('active')); }
+    if ((e.ctrlKey || e.metaKey) && e.key === 'n') { e.preventDefault(); openModal('createModal'); }
+    if ((e.ctrlKey || e.metaKey) && e.key === 'f') { e.preventDefault(); document.getElementById('sbSearchScalable')?.focus(); }
+  });
+
+  function switchModalTab(btn, tab) {
+    btn.closest('.modal-tabs').querySelectorAll('button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const body = btn.closest('.modal-body');
+    body.querySelectorAll('.modal-tab-panel').forEach(p => p.classList.remove('active'));
+    body.querySelector('#tab-' + tab).classList.add('active');
+  }
+
+  // ── Section switching ──
+  document.querySelectorAll('.topnav a[data-section]').forEach(a => {
+    a.addEventListener('click', function(e) {
+      e.preventDefault();
+      document.querySelectorAll('.topnav a').forEach(x => x.classList.remove('active'));
+      this.classList.add('active');
+      document.querySelectorAll('.section-page').forEach(s => s.classList.remove('active'));
+      document.getElementById('section-' + this.dataset.section).classList.add('active');
+    });
+  });
+
+  document.addEventListener('keydown', e => {
+    if (!(e.ctrlKey || e.metaKey)) return;
+    const map = { '1':'sandboxes', '2':'policy', '3':'templates', '4':'connection' };
+    const section = map[e.key];
+    if (!section) return;
+    e.preventDefault();
+    document.querySelectorAll('.topnav a').forEach(x => x.classList.remove('active'));
+    document.querySelector(`.topnav a[data-section="${section}"]`).classList.add('active');
+    document.querySelectorAll('.section-page').forEach(s => s.classList.remove('active'));
+    document.getElementById('section-' + section).classList.add('active');
+  });
+
+  // ── Toast ──
+  function showToast(msg, type) {
+    const c = document.getElementById('toastContainerScalable');
+    const t = document.createElement('div');
+    t.style.cssText = `background:var(--bg-card);border:1px solid ${type==='error'?'var(--danger)':'var(--border)'};border-left:3px solid ${type==='success'?'var(--success)':'var(--danger)'};border-radius:var(--radius-sm);padding:0.6rem 1rem;font-size:0.8rem;box-shadow:0 4px 16px rgba(0,0,0,0.5);animation:toastIn 0.25s ease`;
+    t.textContent = msg;
+    c.appendChild(t);
+    setTimeout(() => { t.style.opacity = '0'; t.style.transition = 'opacity 0.25s'; setTimeout(() => t.remove(), 250); }, 3000);
+  }
+
+  // ── Init ──
+  renderTable();
+</script>
+<style>
+  @keyframes toastIn { from { opacity:0; transform:translateX(20px); } to { opacity:1; transform:translateX(0); } }
+</style>
+</body>
+</html>

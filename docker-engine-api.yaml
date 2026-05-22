@@ -1,0 +1,979 @@
+# Docker Engine API — Subset for sbx-web-ui
+#
+# Only the endpoints needed for container lifecycle management
+# (create, start, stop, remove, inspect, list) and image operations
+# (pull, list). Extracted from the official Docker Engine API spec.
+#
+# Docker Engine API version: 1.54 (latest stable)
+# Base path: /v1.54
+#
+openapi: "3.0.3"
+info:
+  title: Docker Engine API (sbx subset)
+  description: |
+    Minimal subset of the Docker Engine API needed by sbx-web-ui to manage
+    sandbox containers and pull images. Communicated over sandboxd's internal
+    Docker Unix socket.
+  version: "1.54"
+servers:
+  - url: http://localhost/v1.54
+    description: Docker Engine API over Unix socket
+
+paths:
+  # ── Container endpoints ──────────────────────────────────────
+
+  /containers/create:
+    post:
+      operationId: ContainerCreate
+      summary: Create a container
+      description: |
+        Create a container. The container is not started until
+        POST /containers/{id}/start is called.
+
+        The container name is optional; if omitted a random name is assigned.
+        Pass name=value as a query parameter (not in the body).
+      parameters:
+        - name: name
+          in: query
+          description: Assign the specified name to the container. Must match `/?[a-zA-Z0-9][a-zA-Z0-9_.-]+`.
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ContainerCreateRequest"
+      responses:
+        "201":
+          description: Container created successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContainerCreateResponse"
+        "400":
+          description: Bad parameter
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: No such image
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Conflict — name already in use
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /containers/{id}/start:
+    post:
+      operationId: ContainerStart
+      summary: Start a container
+      description: Start a container that was previously created.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: ID or name of the container
+      responses:
+        "204":
+          description: Container started (no content)
+        "304":
+          description: Container already started
+        "404":
+          description: No such container
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /containers/{id}/stop:
+    post:
+      operationId: ContainerStop
+      summary: Stop a container
+      description: Stop a running container.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: ID or name of the container
+        - name: t
+          in: query
+          schema:
+            type: integer
+          description: Number of seconds to wait before killing the container
+      responses:
+        "204":
+          description: Container stopped (no content)
+        "304":
+          description: Container already stopped
+        "404":
+          description: No such container
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /containers/{id}/json:
+    get:
+      operationId: ContainerInspect
+      summary: Inspect a container
+      description: Return low-level information about a container.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: ID or name of the container
+        - name: size
+          in: query
+          schema:
+            type: boolean
+          description: Return the size of container as fields SizeRw and SizeRootFs
+      responses:
+        "200":
+          description: Container information
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContainerInspectResponse"
+        "404":
+          description: No such container
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /containers/{id}:
+    delete:
+      operationId: ContainerDelete
+      summary: Remove a container
+      description: Remove a container.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: ID or name of the container
+        - name: v
+          in: query
+          schema:
+            type: boolean
+          description: Remove anonymous volumes associated with the container
+        - name: force
+          in: query
+          schema:
+            type: boolean
+          description: Force the removal of a running container (uses SIGKILL)
+        - name: link
+          in: query
+          schema:
+            type: boolean
+          description: Remove the specified link and not the underlying container
+      responses:
+        "204":
+          description: Container removed (no content)
+        "400":
+          description: Bad parameter
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: No such container
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /containers/json:
+    get:
+      operationId: ContainerList
+      summary: List containers
+      description: List containers matching optional filters.
+      parameters:
+        - name: all
+          in: query
+          schema:
+            type: boolean
+          description: Show all containers (default shows just running)
+        - name: limit
+          in: query
+          schema:
+            type: integer
+          description: Show `n` last created containers, includes non-running ones
+        - name: size
+          in: query
+          schema:
+            type: boolean
+          description: Return the size of containers as fields SizeRw and SizeRootFs
+        - name: filters
+          in: query
+          schema:
+            type: string
+          description: |
+            JSON-encoded map of filters. Available filters:
+            - `id=<id>` — container's ID
+            - `name=<name>` — container's name
+            - `status=<status>` — running, paused, exited, created
+            - `label=<key>` or `label=<key>=<value>`
+            - `ancestor=<image>` — image or digest
+            - `before=<id>` — created before a container
+            - `since=<id>` — created after a container
+      responses:
+        "200":
+          description: Container list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ContainerSummary"
+        "400":
+          description: Bad parameter
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ── Image endpoints ─────────────────────────────────────────
+
+  /images/create:
+    post:
+      operationId: ImageCreate
+      summary: Pull an image
+      description: |
+        Pull or import an image. The response body is a JSON stream
+        that must be consumed completely for the pull to finish.
+
+        The image to pull is specified by the `fromImage` query parameter.
+      parameters:
+        - name: fromImage
+          in: query
+          schema:
+            type: string
+          description: Name of the image to pull (e.g. `docker/sandbox-templates:shell-docker`)
+        - name: tag
+          in: query
+          schema:
+            type: string
+          description: Tag to pull. If omitted, `latest` is used.
+      responses:
+        "200":
+          description: |
+            Pull progress stream (JSON objects, one per line / newline-delimited JSON).
+            Each object has `status`, `progress`, `id`, etc.
+          content:
+            application/json:
+              schema:
+                type: string
+                description: Newline-delimited JSON stream
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /images/json:
+    get:
+      operationId: ImageList
+      summary: List images
+      description: List Docker images on the daemon.
+      parameters:
+        - name: all
+          in: query
+          schema:
+            type: boolean
+          description: Show all images (default hides intermediate image layers)
+        - name: filters
+          in: query
+          schema:
+            type: string
+          description: |
+            JSON-encoded map of filters:
+            - `reference=<name:tag>` — image's reference
+            - `before=<id>` — images created before
+            - `since=<id>` — images created after
+            - `label=<key>` or `label=<key>=<value>`
+      responses:
+        "200":
+          description: Image list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ImageSummary"
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /images/{name}/json:
+    get:
+      operationId: ImageInspect
+      summary: Inspect an image
+      description: Return low-level information about an image.
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Image name or ID
+      responses:
+        "200":
+          description: Image information
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImageInspectResponse"
+        "404":
+          description: No such image
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ── System (for version detection) ───────────────────────────
+
+  /version:
+    get:
+      operationId: SystemVersion
+      summary: Get version
+      description: Returns the version of Docker Engine that is running.
+      responses:
+        "200":
+          description: Version info
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SystemVersionResponse"
+
+components:
+  schemas:
+
+    # ── Error ─────────────────────────────────────────────────
+
+    ErrorResponse:
+      type: object
+      properties:
+        message:
+          type: string
+          description: Error message
+      example:
+        message: "No such container"
+
+    # ── Container Create ───────────────────────────────────────
+
+    ContainerCreateRequest:
+      type: object
+      description: Configuration for creating a container.
+      properties:
+        Hostname:
+          type: string
+          description: The hostname of the container.
+        User:
+          type: string
+          description: The user inside the container.
+        Env:
+          type: array
+          items:
+            type: string
+          description: |
+            A list of environment variables in the form `KEY=value`.
+            Example: `["WORKSPACE_DIR=/workspace", "HTTP_PROXY=http://gateway.docker.internal:3128"]`
+        Cmd:
+          type: array
+          items:
+            type: string
+          description: Command to run when starting the container.
+        Entrypoint:
+          type: array
+          items:
+            type: string
+          description: The entry point for the container.
+        Image:
+          type: string
+          description: The image name or ID to use for the container.
+        WorkingDir:
+          type: string
+          description: The working directory inside the container.
+        Labels:
+          type: object
+          additionalProperties:
+            type: string
+          description: Key-value pairs to set as labels on the container.
+        HostConfig:
+          $ref: "#/components/schemas/HostConfig"
+        NetworkingConfig:
+          $ref: "#/components/schemas/NetworkingConfig"
+        Tty:
+          type: boolean
+          description: Whether to set up a TTY for the container.
+        OpenStdin:
+          type: boolean
+          description: Open stdin.
+        StdinOnce:
+          type: boolean
+          description: Close stdin after the attached client disconnects.
+        AttachStdin:
+          type: boolean
+        AttachStdout:
+          type: boolean
+        AttachStderr:
+          type: boolean
+        ExposedPorts:
+          type: object
+          description: |
+            An object mapping port/protocol to an empty object.
+            Example: `{"80/tcp": {}, "443/tcp": {}}`
+          additionalProperties:
+            type: object
+        StopSignal:
+          type: string
+          description: Signal to stop the container (default SIGTERM).
+        StopTimeout:
+          type: integer
+          description: Timeout to stop the container in seconds.
+
+    HostConfig:
+      type: object
+      description: Container host configuration (resources, networking, volumes).
+      properties:
+        Binds:
+          type: array
+          items:
+            type: string
+          description: |
+            A list of volume bindings in the form `host_path:container_path[:ro|:rw]`.
+            Example: `["/host/path:/container/path:ro"]`
+        NetworkMode:
+          type: string
+          description: |
+            The network mode to use. Can be:
+            - `bridge` — default bridge network
+            - `host` — use the host's network
+            - `none` — no networking
+            - `container:<name|id>` — reuse another container's network
+            - `<network-name>` — use a named network
+        PortBindings:
+          type: object
+          description: |
+            Map of exposed ports to host bindings.
+            Example: `{"80/tcp": [{"HostPort": "8080"}]}`
+          additionalProperties:
+            type: array
+            items:
+              $ref: "#/components/schemas/PortBinding"
+        RestartPolicy:
+          $ref: "#/components/schemas/RestartPolicy"
+        VolumesFrom:
+          type: array
+          items:
+            type: string
+        CapAdd:
+          type: array
+          items:
+            type: string
+        CapDrop:
+          type: array
+          items:
+            type: string
+        Privileged:
+          type: boolean
+          description: Give extended privileges to this container.
+        ReadonlyRootfs:
+          type: boolean
+          description: Mount the container's root filesystem as read only.
+        Sysctls:
+          type: object
+          additionalProperties:
+            type: string
+          description: Namespaced kernel parameters to set in the container.
+        ShmSize:
+          type: integer
+          description: Size of /dev/shm in bytes.
+        Dns:
+          type: array
+          items:
+            type: string
+        DnsOptions:
+          type: array
+          items:
+            type: string
+        DnsSearch:
+          type: array
+          items:
+            type: string
+        ExtraHosts:
+          type: array
+          items:
+            type: string
+          description: |
+            A list of host/IP mappings to add to the container's /etc/hosts.
+            Format: `hostname:ip`
+        GroupAdd:
+          type: array
+          items:
+            type: string
+          description: Additional groups for the container's user.
+        IpcMode:
+          type: string
+        CgroupParent:
+          type: string
+        Ulimits:
+          type: array
+          items:
+            $ref: "#/components/schemas/ULimit"
+        SecurityOpt:
+          type: array
+          items:
+            type: string
+        Init:
+          type: boolean
+          description: Run an init inside the container that forwards signals and reaps processes.
+
+    PortBinding:
+      type: object
+      properties:
+        HostPort:
+          type: string
+          description: Host port number as a string (e.g. `"8080"`).
+        HostIp:
+          type: string
+          description: Host IP to bind the port to.
+
+    RestartPolicy:
+      type: object
+      properties:
+        Name:
+          type: string
+          enum: ["", "always", "unless-stopped", "on-failure", "no"]
+          description: Restart policy name.
+        MaximumRetryCount:
+          type: integer
+          description: If `on-failure`, the number of times to retry before giving up.
+
+    ULimit:
+      type: object
+      properties:
+        Name:
+          type: string
+          description: Name of the ulimit.
+        Soft:
+          type: integer
+        Hard:
+          type: integer
+
+    NetworkingConfig:
+      type: object
+      properties:
+        EndpointsConfig:
+          type: object
+          description: |
+            A map of network names to endpoint settings.
+            Example: `{"my-network": {"Aliases": ["my-alias"]}}`
+          additionalProperties:
+            $ref: "#/components/schemas/EndpointSettings"
+
+    EndpointSettings:
+      type: object
+      properties:
+        IPAMConfig:
+          type: object
+          properties:
+            IPv4Address:
+              type: string
+            IPv6Address:
+              type: string
+            LinkLocalIPs:
+              type: array
+              items:
+                type: string
+        Links:
+          type: array
+          items:
+            type: string
+        Aliases:
+          type: array
+          items:
+            type: string
+        NetworkID:
+          type: string
+        EndpointID:
+          type: string
+        Gateway:
+          type: string
+        IPAddress:
+          type: string
+        IPPrefixLen:
+          type: integer
+        IPv6Gateway:
+          type: string
+        GlobalIPv6Address:
+          type: string
+        GlobalIPv6PrefixLen:
+          type: integer
+        MacAddress:
+          type: string
+        DriverOpts:
+          type: object
+          additionalProperties:
+            type: string
+
+    ContainerCreateResponse:
+      type: object
+      required: [Id]
+      properties:
+        Id:
+          type: string
+          description: The ID of the created container.
+        Warnings:
+          type: array
+          items:
+            type: string
+          description: Warnings encountered during creation.
+      example:
+        Id: "1c6594faf5"
+        Warnings: null
+
+    # ── Container Inspect ─────────────────────────────────────
+
+    ContainerInspectResponse:
+      type: object
+      properties:
+        Id:
+          type: string
+        Name:
+          type: string
+        State:
+          $ref: "#/components/schemas/ContainerState"
+        Image:
+          type: string
+        Config:
+          $ref: "#/components/schemas/ContainerConfig"
+        NetworkSettings:
+          $ref: "#/components/schemas/NetworkSettings"
+        Mounts:
+          type: array
+          items:
+            $ref: "#/components/schemas/MountPoint"
+        Created:
+          type: string
+        HostConfig:
+          $ref: "#/components/schemas/HostConfig"
+        Platform:
+          type: string
+
+    ContainerState:
+      type: object
+      properties:
+        Status:
+          type: string
+          enum: [created, running, paused, restarting, removing, exited, dead]
+          description: The status of the container.
+        Running:
+          type: boolean
+        Paused:
+          type: boolean
+        Restarting:
+          type: boolean
+        OOMKilled:
+          type: boolean
+        Dead:
+          type: boolean
+        Pid:
+          type: integer
+        ExitCode:
+          type: integer
+        Error:
+          type: string
+        StartedAt:
+          type: string
+          format: date-time
+        FinishedAt:
+          type: string
+          format: date-time
+
+    ContainerConfig:
+      type: object
+      properties:
+        Hostname:
+          type: string
+        User:
+          type: string
+        Env:
+          type: array
+          items:
+            type: string
+        Cmd:
+          type: array
+          items:
+            type: string
+        Entrypoint:
+          type: array
+          items:
+            type: string
+        Image:
+          type: string
+        WorkingDir:
+          type: string
+        Labels:
+          type: object
+          additionalProperties:
+            type: string
+        StopSignal:
+          type: string
+        StopTimeout:
+          type: integer
+
+    NetworkSettings:
+      type: object
+      properties:
+        Networks:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/EndpointSettings"
+        Ports:
+          type: object
+          description: |
+            Map of exposed ports to host bindings.
+            Example: `{"80/tcp": [{"HostIp": "0.0.0.0", "HostPort": "8080"}]}`
+          additionalProperties:
+            type: array
+            items:
+              $ref: "#/components/schemas/PortBinding"
+
+    MountPoint:
+      type: object
+      properties:
+        Type:
+          type: string
+          enum: [bind, volume, tmpfs, npipe, cluster]
+        Name:
+          type: string
+        Source:
+          type: string
+        Destination:
+          type: string
+        Driver:
+          type: string
+        Mode:
+          type: string
+        RW:
+          type: boolean
+        Propagation:
+          type: string
+
+    # ── Container List (summary) ──────────────────────────────
+
+    ContainerSummary:
+      type: object
+      properties:
+        Id:
+          type: string
+        Names:
+          type: array
+          items:
+            type: string
+        Image:
+          type: string
+        ImageID:
+          type: string
+        Command:
+          type: string
+        Created:
+          type: integer
+        State:
+          type: string
+        Status:
+          type: string
+        Ports:
+          type: array
+          items:
+            $ref: "#/components/schemas/Port"
+        Labels:
+          type: object
+          additionalProperties:
+            type: string
+        SizeRw:
+          type: integer
+        SizeRootFs:
+          type: integer
+        HostConfig:
+          type: object
+          properties:
+            NetworkMode:
+              type: string
+        NetworkSettings:
+          type: object
+          properties:
+            Networks:
+              type: object
+              additionalProperties:
+                type: object
+                properties:
+                  IPAddress:
+                    type: string
+                  IPPrefixLen:
+                    type: integer
+                  Gateway:
+                    type: string
+
+    Port:
+      type: object
+      properties:
+        IP:
+          type: string
+        PrivatePort:
+          type: integer
+        PublicPort:
+          type: integer
+        Type:
+          type: string
+          enum: [tcp, udp, sctp]
+
+    # ── Image List ────────────────────────────────────────────
+
+    ImageSummary:
+      type: object
+      properties:
+        Id:
+          type: string
+        ParentId:
+          type: string
+        RepoTags:
+          type: array
+          items:
+            type: string
+        RepoDigests:
+          type: array
+          items:
+            type: string
+        Created:
+          type: integer
+        Size:
+          type: integer
+        VirtualSize:
+          type: integer
+        SharedSize:
+          type: integer
+        Labels:
+          type: object
+          additionalProperties:
+            type: string
+        Containers:
+          type: integer
+
+    # ── Image Inspect ─────────────────────────────────────────
+
+    ImageInspectResponse:
+      type: object
+      properties:
+        Id:
+          type: string
+        RepoTags:
+          type: array
+          items:
+            type: string
+        RepoDigests:
+          type: array
+          items:
+            type: string
+        Parent:
+          type: string
+        Comment:
+          type: string
+        Created:
+          type: string
+        Size:
+          type: integer
+        VirtualSize:
+          type: integer
+        DockerVersion:
+          type: string
+        Architecture:
+          type: string
+        Os:
+          type: string
+        Config:
+          $ref: "#/components/schemas/ContainerConfig"
+
+    # ── System Version ────────────────────────────────────────
+
+    SystemVersionResponse:
+      type: object
+      properties:
+        Version:
+          type: string
+        ApiVersion:
+          type: string
+        MinAPIVersion:
+          type: string
+        GitCommit:
+          type: string
+        Os:
+          type: string
+        Arch:
+          type: string
+        KernelVersion:
+          type: string
+        BuildTime:
+          type: string

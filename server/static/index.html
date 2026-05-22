@@ -1,0 +1,1439 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sandbox Manager</title>
+  <style>
+    /* === Reset & Base === */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: #0f0f1a;
+      color: #d0d0e0;
+      padding: 20px;
+      min-height: 100vh;
+    }
+
+    /* === Scrollbar === */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #1a1a2e; }
+    ::-webkit-scrollbar-thumb { background: #3a3a5a; border-radius: 3px; }
+
+    /* === Layout === */
+    .app-wrapper { max-width: 1400px; margin: 0 auto; position: relative; }
+
+    /* === Header / Top Bar === */
+    .top-bar {
+      display: flex; align-items: center; justify-content: space-between;
+      flex-wrap: wrap; gap: 12px; margin-bottom: 20px;
+    }
+    .top-bar-left { display: flex; align-items: center; gap: 16px; }
+    .page-title { font-size: 1.4rem; font-weight: 700; color: #f0f0ff; letter-spacing: -0.3px; }
+    .health-badge {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: #1e1e36; padding: 6px 14px; border-radius: 20px;
+      font-size: 0.8rem; border: 1px solid #2a2a48; cursor: pointer;
+    }
+    .health-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+    .health-dot.ok { background: #2ecc71; box-shadow: 0 0 6px #2ecc7180; }
+    .health-dot.err { background: #e74c3c; box-shadow: 0 0 6px #e74c3c80; }
+    .version-tag { color: #8888aa; font-size: 0.75rem; }
+    .sock-path {
+      font-family: "SF Mono", "Fira Code", monospace;
+      font-size: 0.7rem; color: #7777aa; background: #15152a;
+      padding: 4px 10px; border-radius: 12px; border: 1px solid #2a2a48;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 300px;
+    }
+    .btn-create {
+      background: #e94560; color: #fff; border: none; padding: 10px 24px;
+      border-radius: 8px; font-weight: 600; font-size: 0.9rem; cursor: pointer;
+      transition: background 0.15s, transform 0.1s;
+      display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
+    }
+    .btn-create:hover { background: #ff5775; }
+    .btn-create:active { transform: scale(0.97); }
+
+    /* === Summary Bar === */
+    .summary-bar {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+      gap: 12px; margin-bottom: 20px;
+    }
+    .summary-card {
+      background: #1a1a2e; border: 1px solid #2a2a48; border-radius: 12px;
+      padding: 14px 18px; text-align: center;
+    }
+    .summary-card .num { font-size: 2rem; font-weight: 700; line-height: 1.1; }
+    .summary-card .num.total   { color: #a0a0ff; }
+    .summary-card .num.running { color: #2ecc71; }
+    .summary-card .num.stopped { color: #e74c3c; }
+    .summary-card .label {
+      font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.6px;
+      color: #8888aa; margin-top: 4px;
+    }
+
+    /* === Tab Nav === */
+    .tab-nav {
+      display: flex; gap: 4px; margin-bottom: 16px;
+      border-bottom: 1px solid #2a2a48; padding-bottom: 0;
+    }
+    .tab-nav button {
+      background: transparent; color: #8888aa; border: none;
+      padding: 10px 18px; font-size: 0.85rem; font-weight: 500;
+      cursor: pointer; border-bottom: 2px solid transparent;
+      transition: all 0.12s; margin-bottom: -1px;
+    }
+    .tab-nav button:hover { color: #d0d0e0; }
+    .tab-nav button.active { color: #e94560; border-bottom-color: #e94560; }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    /* === Two-column layout (main + side) === */
+    .main-area { display: flex; gap: 20px; align-items: flex-start; }
+    .main-content { flex: 1; min-width: 0; }
+    .side-panel-placeholder {
+      width: 0; overflow: hidden; transition: width 0.3s ease; flex-shrink: 0;
+    }
+    .side-panel-placeholder.open { width: 380px; }
+
+    /* === Sandbox Table === */
+    .section-label {
+      font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.8px;
+      color: #8888aa; margin-bottom: 10px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .section-label::after {
+      content: ''; flex: 1; height: 1px; background: #2a2a48;
+    }
+
+    .sandbox-table {
+      width: 100%; border-collapse: collapse; background: #1a1a2e;
+      border-radius: 12px; overflow: hidden; border: 1px solid #2a2a48;
+      margin-bottom: 20px;
+    }
+    .sandbox-table th {
+      text-align: left; padding: 10px 14px; font-size: 0.7rem;
+      text-transform: uppercase; letter-spacing: 0.6px; color: #8888aa;
+      background: #15152a; border-bottom: 1px solid #2a2a48;
+    }
+    .sandbox-table td {
+      padding: 10px 14px; font-size: 0.85rem;
+      border-bottom: 1px solid #252542; vertical-align: middle;
+    }
+    .sandbox-table tr:last-child td { border-bottom: none; }
+    .sandbox-table tr:hover td { background: #1e1e3a; }
+
+    .status-badge {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 3px 10px; border-radius: 12px; font-size: 0.75rem; font-weight: 500;
+    }
+    .status-badge.running { background: #1a3a2a; color: #2ecc71; border: 1px solid #2ecc7140; }
+    .status-badge.stopped { background: #3a1a1a; color: #e74c3c; border: 1px solid #e74c3c40; }
+    .status-dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+    .status-dot.running { background: #2ecc71; }
+    .status-dot.stopped { background: #e74c3c; }
+
+    .col-name  { width: 24%; }
+    .col-agent { width: 18%; }
+    .col-status { width: 14%; }
+    .col-actions { width: 44%; text-align: right; }
+
+    .btn-sm {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 5px 12px; border-radius: 6px; font-size: 0.75rem;
+      font-weight: 500; border: none; cursor: pointer; transition: background 0.12s;
+    }
+    .btn-sm.details { background: #2a2a50; color: #a0a0ff; }
+    .btn-sm.details:hover { background: #3a3a6a; }
+    .btn-sm.ports { background: #1a2a3a; color: #63b3ed; }
+    .btn-sm.ports:hover { background: #2a3a5a; }
+    .btn-sm.delete { background: transparent; color: #e74c3c; border: 1px solid #e74c3c40; }
+    .btn-sm.delete:hover { background: #3a1a1a; }
+    .btn-sm.start-sb { background: #1a3a2a; color: #2ecc71; border: 1px solid #2ecc7140; }
+    .btn-sm.start-sb:hover { background: #2a5a3a; }
+    .btn-sm.stop-sb { background: #3a3a1a; color: #f39c12; border: 1px solid #f39c1240; }
+    .btn-sm.stop-sb:hover { background: #5a4a2a; }
+    .actions-group { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+
+    /* === Detail Row (expandable) === */
+    .detail-row { display: none; }
+    .detail-row.open { display: table-row; }
+    .detail-cell { padding: 16px 20px !important; background: #15152a; }
+    .detail-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 10px 20px;
+    }
+    .detail-item .key {
+      font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.5px;
+      color: #8888aa; display: block; margin-bottom: 2px;
+    }
+    .detail-item .val {
+      font-size: 0.85rem; color: #d0d0e0; word-break: break-all;
+    }
+
+    /* === Slide-out Panel === */
+    .slide-panel {
+      background: #1a1a2e; border: 1px solid #2a2a48; border-radius: 12px;
+      padding: 20px; width: 380px; flex-shrink: 0;
+    }
+    .slide-panel h3 {
+      font-size: 1rem; font-weight: 600; color: #f0f0ff;
+      margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between;
+    }
+    .slide-panel .close-btn {
+      background: none; border: none; color: #8888aa;
+      font-size: 1.2rem; cursor: pointer; padding: 0 4px;
+    }
+    .slide-panel .close-btn:hover { color: #e94560; }
+    .form-group { margin-bottom: 12px; }
+    .form-group label {
+      display: block; font-size: 0.7rem; text-transform: uppercase;
+      letter-spacing: 0.5px; color: #8888aa; margin-bottom: 3px;
+    }
+    .form-group input, .form-group select {
+      width: 100%; padding: 8px 12px; background: #0f0f1a;
+      border: 1px solid #2a2a48; border-radius: 6px; color: #d0d0e0;
+      font-size: 0.85rem; outline: none; transition: border-color 0.12s;
+    }
+    .form-group input:focus, .form-group select:focus { border-color: #e94560; }
+    .form-group input::placeholder { color: #55557a; }
+    .form-row { display: flex; gap: 10px; }
+    .form-row .form-group { flex: 1; }
+    .btn-submit {
+      width: 100%; background: #e94560; color: #fff; border: none;
+      padding: 10px; border-radius: 8px; font-weight: 600; font-size: 0.85rem;
+      cursor: pointer; margin-top: 4px; transition: background 0.12s;
+    }
+    .btn-submit:hover { background: #ff5775; }
+    .btn-submit:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* === Template List === */
+    .template-strip {
+      display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px;
+    }
+    .template-chip {
+      background: #1e1e36; border: 1px solid #2a2a48; border-radius: 8px;
+      padding: 6px 14px; font-size: 0.8rem; color: #b0b0d0;
+      display: inline-flex; align-items: center; gap: 6px;
+    }
+    .template-chip .tname { font-weight: 500; color: #d0d0ff; }
+    .template-chip .tdesc { color: #8888aa; font-size: 0.7rem; }
+
+    /* === Policy Section === */
+    .policy-section {
+      background: #1a1a2e; border: 1px solid #2a2a48;
+      border-radius: 12px; padding: 16px 20px; margin-bottom: 20px;
+    }
+    .policy-section .section-label { margin-bottom: 12px; }
+    .policy-table {
+      width: 100%; border-collapse: collapse; margin-bottom: 12px;
+    }
+    .policy-table th {
+      text-align: left; padding: 6px 10px; font-size: 0.65rem;
+      text-transform: uppercase; letter-spacing: 0.5px; color: #8888aa;
+      border-bottom: 1px solid #2a2a48;
+    }
+    .policy-table td {
+      padding: 6px 10px; font-size: 0.8rem; border-bottom: 1px solid #252542;
+    }
+    .policy-table .action-tag {
+      display: inline-block; padding: 2px 8px; border-radius: 4px;
+      font-size: 0.7rem; font-weight: 600; text-transform: uppercase;
+    }
+    .action-tag.allow { background: #1a3a2a; color: #2ecc71; }
+    .action-tag.deny  { background: #3a1a1a; color: #e74c3c; }
+    .action-tag.remove-resource { background: #3a2a1a; color: #f39c12; }
+    .action-tag.remove-id      { background: #2a1a3a; color: #a06adf; }
+    .action-tag.default-set    { background: #1a2a3a; color: #5fa8d3; }
+    .btn-sm.remove-pol {
+      background: transparent; border: none; color: #e74c3c;
+      cursor: pointer; font-size: 0.8rem; padding: 2px 6px; border-radius: 4px;
+    }
+    .btn-sm.remove-pol:hover { background: #3a1a1a; }
+
+    .quick-policy-form {
+      display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end;
+      padding-top: 8px; border-top: 1px solid #2a2a48;
+    }
+    .quick-policy-form .pf-group { display: flex; flex-direction: column; gap: 2px; }
+    .quick-policy-form .pf-group label {
+      font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.4px; color: #8888aa;
+    }
+    .quick-policy-form .pf-group input,
+    .quick-policy-form .pf-group select {
+      padding: 6px 10px; background: #0f0f1a; border: 1px solid #2a2a48;
+      border-radius: 5px; color: #d0d0e0; font-size: 0.8rem; outline: none;
+    }
+    .quick-policy-form .pf-group input:focus,
+    .quick-policy-form .pf-group select:focus { border-color: #e94560; }
+    .quick-policy-form .pf-group input::placeholder { color: #55557a; }
+    .btn-add-pol {
+      background: #2a2a50; color: #a0a0ff; border: none;
+      padding: 6px 16px; border-radius: 6px; font-size: 0.75rem; font-weight: 500;
+      cursor: pointer; white-space: nowrap; align-self: flex-end;
+    }
+    .btn-add-pol:hover { background: #3a3a6a; }
+
+    /* === Ports Section === */
+    .ports-section {
+      background: #1a1a2e; border: 1px solid #2a2a48;
+      border-radius: 12px; padding: 16px 20px; margin-bottom: 20px;
+    }
+    .ports-table {
+      width: 100%; border-collapse: collapse; margin-bottom: 12px;
+    }
+    .ports-table th {
+      text-align: left; padding: 6px 10px; font-size: 0.65rem;
+      text-transform: uppercase; letter-spacing: 0.5px; color: #8888aa;
+      border-bottom: 1px solid #2a2a48;
+    }
+    .ports-table td {
+      padding: 6px 10px; font-size: 0.8rem; border-bottom: 1px solid #252542;
+      vertical-align: middle;
+    }
+    .btn-sm.unpublish {
+      background: transparent; border: none; color: #f39c12;
+      cursor: pointer; font-size: 0.8rem; padding: 2px 6px; border-radius: 4px;
+    }
+    .btn-sm.unpublish:hover { background: #3a2a1a; }
+
+    .quick-port-form {
+      display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end;
+      padding-top: 8px; border-top: 1px solid #2a2a48;
+    }
+    .quick-port-form .pf-group { display: flex; flex-direction: column; gap: 2px; }
+    .quick-port-form .pf-group label {
+      font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.4px; color: #8888aa;
+    }
+    .quick-port-form .pf-group input,
+    .quick-port-form .pf-group select {
+      padding: 6px 10px; background: #0f0f1a; border: 1px solid #2a2a48;
+      border-radius: 5px; color: #d0d0e0; font-size: 0.8rem; outline: none;
+    }
+    .quick-port-form .pf-group input:focus,
+    .quick-port-form .pf-group select:focus { border-color: #e94560; }
+    .quick-port-form .pf-group input::placeholder { color: #55557a; }
+    .btn-add-port {
+      background: #1a3a2a; color: #2ecc71; border: none;
+      padding: 6px 16px; border-radius: 6px; font-size: 0.75rem; font-weight: 500;
+      cursor: pointer; white-space: nowrap; align-self: flex-end;
+    }
+    .btn-add-port:hover { background: #2a5a3a; }
+
+    /* === Banners === */
+    .banner-area { margin-bottom: 16px; }
+    .banner {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 16px; border-radius: 8px; font-size: 0.8rem;
+      margin-bottom: 8px; animation: slideDown 0.25s ease;
+    }
+    .banner.error { background: #3a1a1a; border: 1px solid #e74c3c40; color: #e74c3c; }
+    .banner.success { background: #1a3a2a; border: 1px solid #2ecc7140; color: #2ecc71; }
+    .banner.info { background: #1a2a3a; border: 1px solid #63b3ed40; color: #63b3ed; }
+    .banner .dismiss { background: none; border: none; color: inherit; cursor: pointer; font-size: 1.1rem; padding: 0 4px; opacity: 0.7; }
+    .banner .dismiss:hover { opacity: 1; }
+    @keyframes slideDown { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
+
+    /* === Loading / Empty === */
+    .loading { display: flex; align-items: center; gap: 8px; color: #55557a; font-size: 0.85rem; padding: 12px 0; }
+    .spinner {
+      width: 14px; height: 14px; border: 2px solid #3a3a5a;
+      border-top-color: #e94560; border-radius: 50%;
+      animation: spin 0.6s linear infinite; display: inline-block;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .empty-note { color: #55557a; font-size: 0.8rem; padding: 6px 0; }
+
+    .btn-sm.allow-pol { background: #1a3a2a; color: #2ecc71; border: 1px solid #2ecc7140; }
+    .btn-sm.allow-pol:hover { background: #2a5a3a; }
+    .btn-sm.deny-pol { background: #3a1a1a; color: #e74c3c; border: 1px solid #e74c3c40; }
+    .btn-sm.deny-pol:hover { background: #5a2a2a; }
+
+    .netlog-host { font-family: "SF Mono", "Fira Code", monospace; font-size: 0.8rem; }
+
+    /* === Responsive === */
+    @media (max-width: 860px) {
+      .main-area { flex-direction: column; }
+      .side-panel-placeholder { width: 100% !important; }
+      .side-panel-placeholder.open { width: 100% !important; }
+      .slide-panel { width: 100%; }
+      .sock-path { max-width: 180px; }
+      .detail-grid { grid-template-columns: 1fr; }
+      .quick-policy-form { flex-direction: column; align-items: stretch; }
+      .quick-port-form { flex-direction: column; align-items: stretch; }
+    }
+    @media (max-width: 500px) {
+      body { padding: 12px; }
+      .top-bar { flex-direction: column; align-items: stretch; }
+      .sandbox-table th, .sandbox-table td { padding: 8px 10px; font-size: 0.75rem; }
+      .summary-bar { grid-template-columns: repeat(3, 1fr); }
+      .summary-card .num { font-size: 1.5rem; }
+      .actions-group { flex-wrap: wrap; }
+    }
+
+    .flex-center { display: flex; align-items: center; gap: 8px; }
+    .mt-1 { margin-top: 4px; }
+    .mb-1 { margin-bottom: 4px; }
+    code { font-family: "SF Mono", "Fira Code", monospace; font-size: 0.8em; background: rgba(0,0,0,0.3); padding: 1px 5px; border-radius: 3px; }
+  </style>
+</head>
+<body>
+<div class="app-wrapper">
+
+  <!-- ============ TOP BAR ============ -->
+  <header class="top-bar">
+    <div class="top-bar-left">
+      <h1 class="page-title">Sandbox Manager</h1>
+      <span class="health-badge" id="healthBadge">
+        <span class="health-dot ok" id="healthDot"></span>
+        <span id="healthLabel">Connecting…</span>
+        <span class="version-tag" id="versionTag"></span>
+      </span>
+      <span class="sock-path" id="sockPath" title="Socket path">detecting…</span>
+    </div>
+    <button class="btn-create" id="btnCreate">+ Create Sandbox</button>
+  </header>
+
+  <!-- ============ BANNER ============ -->
+  <div class="banner-area" id="bannerArea"></div>
+
+  <!-- ============ SUMMARY BAR ============ -->
+  <div class="summary-bar">
+    <div class="summary-card"><div class="num total" id="sbTotal">0</div><div class="label">Total</div></div>
+    <div class="summary-card"><div class="num running" id="sbRunning">0</div><div class="label">Running</div></div>
+    <div class="summary-card"><div class="num stopped" id="sbStopped">0</div><div class="label">Stopped</div></div>
+  </div>
+
+  <!-- ============ TAB NAV ============ -->
+  <nav class="tab-nav">
+    <button class="active" data-tab="sandboxes">Sandboxes</button>
+    <button data-tab="ports">Published Ports</button>
+    <button data-tab="policy">Policy</button>
+    <button data-tab="network-log">Network Log</button>
+  </nav>
+
+  <!-- ============ TAB: Sandboxes ============ -->
+  <div class="tab-panel active" id="panel-sandboxes">
+    <div class="main-area">
+      <div class="main-content">
+
+        <!-- Templates -->
+        <div class="section-label">Templates</div>
+        <div class="template-strip" id="templateStrip">
+          <div class="loading"><span class="spinner"></span>Loading templates…</div>
+        </div>
+
+        <!-- Pull Image -->
+        <details style="margin-bottom:16px;background:#1a1a2e;border:1px solid #2a2a48;border-radius:12px;padding:10px 16px;">
+          <summary style="cursor:pointer;font-size:0.8rem;text-transform:uppercase;letter-spacing:0.6px;color:#8888aa;font-weight:500;">Pull Docker Image</summary>
+          <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
+            <div style="flex:2;min-width:200px;">
+              <label style="display:block;font-size:0.65rem;text-transform:uppercase;letter-spacing:0.4px;color:#8888aa;margin-bottom:2px;">Image Name</label>
+              <input type="text" id="pullImageName" placeholder="docker/sandbox-templates:shell-docker" style="width:100%;padding:8px 12px;background:#0f0f1a;border:1px solid #2a2a48;border-radius:6px;color:#d0d0e0;font-size:0.85rem;outline:none;">
+            </div>
+            <div style="flex:1;min-width:100px;">
+              <label style="display:block;font-size:0.65rem;text-transform:uppercase;letter-spacing:0.4px;color:#8888aa;margin-bottom:2px;">Tag</label>
+              <input type="text" id="pullImageTag" placeholder="latest" style="width:100%;padding:8px 12px;background:#0f0f1a;border:1px solid #2a2a48;border-radius:6px;color:#d0d0e0;font-size:0.85rem;outline:none;">
+            </div>
+            <button class="btn-add-pol" id="btnPullImage" style="background:#2a2a50;color:#a0a0ff;align-self:flex-end;">Pull Image</button>
+          </div>
+          <div id="pullProgress" style="margin-top:8px;font-size:0.75rem;color:#8888aa;display:none;"></div>
+        </details>
+
+        <!-- Docker Images List -->
+        <div class="section-label">Docker Images</div>
+        <div id="dockerImagesStrip" style="margin-bottom:20px;">
+          <div class="loading"><span class="spinner"></span>Loading images…</div>
+        </div>
+
+        <!-- Sandbox Table -->
+        <div class="section-label">Sandboxes</div>
+        <table class="sandbox-table" id="sandboxTable">
+          <thead>
+            <tr>
+              <th class="col-name">Name</th>
+              <th class="col-agent">Agent</th>
+              <th class="col-status">Status</th>
+              <th class="col-actions">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="sandboxBody">
+            <tr><td colspan="4"><div class="loading"><span class="spinner"></span>Loading sandboxes…</div></td></tr>
+          </tbody>
+        </table>
+
+      </div><!-- /main-content -->
+
+      <!-- RIGHT: Slide-out Panel -->
+      <div class="side-panel-placeholder" id="slidePanelContainer">
+        <div class="slide-panel" id="slidePanel">
+          <h3>
+            Create Sandbox
+            <button class="close-btn" id="closePanel">&times;</button>
+          </h3>
+          <form id="createForm">
+            <div class="form-group">
+              <label>Runtime Name *</label>
+              <input type="text" id="cfRuntimeName" placeholder="my-sandbox" required>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label>Agent Name *</label>
+                <input type="text" id="cfAgentName" placeholder="shell" value="shell">
+              </div>
+              <div class="form-group">
+                <label>Profile</label>
+                <select id="cfProfile">
+                  <option value="">Default</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-group">
+              <label>Workspace Directory *</label>
+              <input type="text" id="cfWorkspaceDir" placeholder="/workspaces/my-sandbox">
+              <div class="form-group">
+                <label>Startup Command</label>
+                <input type="text" id="cfStartupCmd" placeholder="e.g. claude --no-auto-update">
+                <span class="form-hint">Runs inside the container via Docker exec when you start the sandbox.</span>
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label>Detached</label>
+                <select id="cfDetached">
+                  <option value="true" selected>true</option>
+                  <option value="false">false</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Pull Policy</label>
+                <select id="cfPullPolicy">
+                  <option value="always">always</option>
+                  <option value="missing">missing</option>
+                  <option value="never">never</option>
+                </select>
+              </div>
+            </div>
+            </div>
+            <button class="btn-submit" id="cfSubmit">Create Sandbox</button>
+          </form>
+        </div>
+      </div>
+
+    </div><!-- /main-area -->
+
+    <!-- ============ POLICY SECTION (inline on sandbox tab) ============ -->
+    <div class="policy-section">
+      <div class="section-label">Policy Rules</div>
+      <table class="policy-table">
+        <thead>
+          <tr>
+            <th>Action</th>
+            <th>Resource / ID</th>
+            <th>Scope</th>
+            <th style="width:40px;"></th>
+          </tr>
+        </thead>
+        <tbody id="policyBody">
+          <tr><td colspan="4"><div class="loading"><span class="spinner"></span>Loading policy rules…</div></td></tr>
+        </tbody>
+      </table>
+
+      <div class="quick-policy-form" id="quickPolicyForm">
+        <div class="pf-group">
+          <label>Action</label>
+          <select id="polAction">
+            <option value="allow">Allow</option>
+            <option value="deny">Deny</option>
+            <option value="remove-resource">Remove Resource</option>
+            <option value="remove-id">Remove ID</option>
+          </select>
+        </div>
+        <div class="pf-group" style="flex:2;min-width:160px;">
+          <label>Resource / ID</label>
+          <input type="text" id="polResource" placeholder="e.g. api.example.com:443" />
+        </div>
+        <div class="pf-group" style="flex:1;min-width:100px;">
+          <label>Sandbox (optional)</label>
+          <input type="text" id="polScope" placeholder="sandbox name" />
+        </div>
+        <button class="btn-add-pol" id="btnAddPolicy">+ Add Rule</button>
+      </div>
+    </div>
+
+  </div><!-- /panel-sandboxes -->
+
+  <!-- ============ TAB: Ports ============ -->
+  <div class="tab-panel" id="panel-ports">
+    <div class="ports-section">
+      <div class="section-label">Published Ports</div>
+      <p style="font-size:0.8rem;color:#55557a;margin-bottom:12px;">
+        Publish a sandbox container port to the host so services inside the sandbox are reachable.
+      </p>
+      <table class="ports-table">
+        <thead>
+          <tr>
+            <th>Host IP</th>
+            <th>Sandbox</th>
+            <th>Host Port</th>
+            <th>Sandbox Port</th>
+            <th>Protocol</th>
+            <th style="width:40px;"></th>
+          </tr>
+        </thead>
+        <tbody id="portsBody">
+          <tr><td colspan="6"><div class="loading"><span class="spinner"></span>Loading port mappings…</div></td></tr>
+        </tbody>
+      </table>
+
+      <div class="quick-port-form" id="quickPortForm">
+        <div class="pf-group">
+          <label>Sandbox Name</label>
+          <input type="text" id="pfSandboxName" placeholder="my-sandbox" list="sandboxList" />
+          <datalist id="sandboxList"></datalist>
+        </div>
+        <div class="pf-group">
+          <label>Host Port</label>
+          <input type="text" id="pfHostPort" placeholder="8080" />
+        </div>
+        <div class="pf-group">
+          <label>Sandbox Port</label>
+          <input type="text" id="pfSandboxPort" placeholder="80" />
+        </div>
+        <div class="pf-group">
+          <label>Protocol</label>
+          <select id="pfProtocol">
+            <option value="tcp">TCP</option>
+            <option value="udp">UDP</option>
+          </select>
+        </div>
+        <button class="btn-add-port" id="btnAddPort">+ Publish Port</button>
+      </div>
+    </div>
+  </div><!-- /panel-ports -->
+
+  <!-- ============ TAB: Policy (full) ============ -->
+  <div class="tab-panel" id="panel-policy">
+    <div class="policy-section">
+      <div class="section-label">Default Policy Preset</div>
+      <div class="quick-policy-form" style="border:none;padding-top:0;">
+        <div class="pf-group">
+          <label>Preset</label>
+          <select id="policyPreset">
+            <option value="balanced">Balanced</option>
+            <option value="allow-all">Allow All</option>
+            <option value="deny-all">Deny All</option>
+          </select>
+        </div>
+        <button class="btn-add-pol" id="btnSetPolicyPreset" style="background:#1a3a2a;color:#2ecc71;">Set Default</button>
+      </div>
+    </div>
+    <div class="policy-section">
+      <div class="section-label">All Policy Rules</div>
+      <table class="policy-table">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Action</th>
+            <th>Resource</th>
+            <th>Scope</th>
+            <th>Status</th>
+            <th style="width:40px;"></th>
+          </tr>
+        </thead>
+        <tbody id="policyFullBody">
+          <tr><td colspan="6"><div class="loading"><span class="spinner"></span>Loading policy rules…</div></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div><!-- /panel-policy -->
+
+  <!-- ============ TAB: Network Log ============ -->
+  <div class="tab-panel" id="panel-network-log">
+    <div class="section-label">Network Activity Log</div>
+    <p style="font-size:0.8rem;color:#55557a;margin-bottom:12px;">
+      Shows blocked (denied) and allowed network connections tracked by the proxy.
+      Click <strong>Allow</strong> or <strong>Block</strong> to create a policy rule for a host.
+    </p>
+
+    <div class="netlog-summary" style="display:flex;gap:12px;margin-bottom:16px;">
+      <div style="background:#1a1a2e;border:1px solid #2a2a48;border-radius:10px;padding:12px 20px;flex:1;text-align:center;">
+        <div style="font-size:1.6rem;font-weight:700;color:#e74c3c;" id="netlogBlockedCount">0</div>
+        <div style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.6px;color:#8888aa;margin-top:2px;">Blocked</div>
+      </div>
+      <div style="background:#1a1a2e;border:1px solid #2a2a48;border-radius:10px;padding:12px 20px;flex:1;text-align:center;">
+        <div style="font-size:1.6rem;font-weight:700;color:#2ecc71;" id="netlogAllowedCount">0</div>
+        <div style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.6px;color:#8888aa;margin-top:2px;">Allowed</div>
+      </div>
+    </div>
+
+    <!-- Blocked Hosts Table -->
+    <div class="section-label" style="margin-top:8px;">
+      <span style="display:inline-flex;align-items:center;gap:6px;">
+        <span style="width:8px;height:8px;border-radius:50%;background:#e74c3c;display:inline-block;"></span>
+        Blocked Hosts
+      </span>
+    </div>
+    <table class="policy-table" style="margin-bottom:20px;">
+      <thead>
+        <tr>
+          <th>Host</th>
+          <th>Sandbox VM</th>
+          <th>Proxy Type</th>
+          <th>Rule</th>
+          <th>Hits</th>
+          <th>Last Seen</th>
+          <th>Reason</th>
+          <th style="width:80px;">Action</th>
+        </tr>
+      </thead>
+      <tbody id="netlogBlockedBody">
+        <tr><td colspan="8"><div class="loading"><span class="spinner"></span>Loading blocked hosts…</div></td></tr>
+      </tbody>
+    </table>
+
+    <!-- Allowed Hosts Table -->
+    <div class="section-label" style="margin-top:8px;">
+      <span style="display:inline-flex;align-items:center;gap:6px;">
+        <span style="width:8px;height:8px;border-radius:50%;background:#2ecc71;display:inline-block;"></span>
+        Allowed Hosts
+      </span>
+    </div>
+    <table class="policy-table">
+      <thead>
+        <tr>
+          <th>Host</th>
+          <th>Sandbox VM</th>
+          <th>Proxy Type</th>
+          <th>Rule</th>
+          <th>Hits</th>
+          <th>Last Seen</th>
+          <th>Reason</th>
+          <th style="width:80px;">Action</th>
+        </tr>
+      </thead>
+      <tbody id="netlogAllowedBody">
+        <tr><td colspan="8"><div class="loading"><span class="spinner"></span>Loading allowed hosts…</div></td></tr>
+      </tbody>
+    </table>
+  </div><!-- /panel-network-log -->
+
+  <!-- ============ FOOTER ============ -->
+  <div style="margin-top:20px;padding:10px 16px;background:#15152a;border-radius:8px;border:1px solid #2a2a48;display:flex;flex-wrap:wrap;gap:12px;align-items:center;font-size:0.75rem;">
+    <span style="color:#8888aa;">Connection</span>
+    <span style="font-family:monospace;color:#b0b0d0;" id="footerSocket">detecting…</span>
+  </div>
+
+</div><!-- /app-wrapper -->
+
+<script>
+(function() {
+  'use strict';
+
+  // === State ===
+  const state = {
+    sandboxes: [],
+    rules: [],
+    ports: [],
+    templates: [],
+    health: null,
+  };
+
+  // === DOM refs ===
+  const $ = (s, ctx) => (ctx || document).querySelector(s);
+  const $$ = (s, ctx) => [...(ctx || document).querySelectorAll(s)];
+
+  const bannerArea = $('#bannerArea');
+  const healthDot = $('#healthDot');
+  const healthLabel = $('#healthLabel');
+  const versionTag = $('#versionTag');
+  const sockPath = $('#sockPath');
+  const sandboxBody = $('#sandboxBody');
+  const policyBody = $('#policyBody');
+  const policyFullBody = $('#policyFullBody');
+  const portsBody = $('#portsBody');
+  const templateStrip = $('#templateStrip');
+  const sandboxListDatalist = $('#sandboxList');
+
+  // === API helper ===
+  async function api(method, path, body) {
+    const opts = {
+      method,
+      headers: { 'Accept': 'application/json' },
+    };
+    if (body !== undefined) {
+      opts.headers['Content-Type'] = 'application/json';
+      opts.body = JSON.stringify(body);
+    }
+    const res = await fetch(path, opts);
+    let data = null;
+    const ct = res.headers.get('Content-Type') || '';
+    if (ct.includes('application/json')) {
+      data = await res.json();
+    } else {
+      const text = await res.text();
+      data = { message: text || res.statusText };
+    }
+    if (!res.ok) {
+      const err = new Error(data.message || data.error || `HTTP ${res.status}`);
+      err.status = res.status;
+      err.data = data;
+      throw err;
+    }
+    return data;
+  }
+
+  // === Banners ===
+  function showBanner(msg, type, autoDismiss) {
+    const cls = type === 'error' ? 'error' : type === 'info' ? 'info' : type === 'warning' ? 'info' : 'success';
+    const el = document.createElement('div');
+    el.className = 'banner ' + cls;
+    el.innerHTML = `<span>${escapeHtml(msg)}</span><button class="dismiss">&times;</button>`;
+    el.querySelector('.dismiss').addEventListener('click', () => el.remove());
+    bannerArea.appendChild(el);
+    if (autoDismiss !== false) {
+      setTimeout(() => { if (el.parentNode) el.remove(); }, 5000);
+    }
+  }
+
+  function escapeHtml(str) {
+    if (str == null) return '';
+    const d = document.createElement('div');
+    d.appendChild(document.createTextNode(String(str)));
+    return d.innerHTML;
+  }
+
+  // === Init: fetch everything ===
+  async function init() {
+    await Promise.all([
+      fetchHealth().catch(() => {}),
+      fetchSocket().catch(() => {}),
+      fetchSandboxes().catch(() => {}),
+      fetchTemplates().catch(() => {}),
+      fetchImages().catch(() => {}),
+      fetchPolicyRules().catch(() => {}),
+      fetchPorts().catch(() => {}),
+      fetchNetworkLog().catch(() => {}),
+    ]);
+  }
+
+  // === Health ===
+  async function fetchHealth() {
+    try {
+      const data = await api('GET', '/api/health');
+      state.health = data;
+      healthDot.className = 'health-dot ok';
+      healthLabel.textContent = data.status === 'healthy' ? 'Daemon OK' : data.status;
+      versionTag.textContent = data.version || '';
+    } catch (err) {
+      healthDot.className = 'health-dot err';
+      healthLabel.textContent = 'Disconnected';
+      versionTag.textContent = '';
+    }
+  }
+
+  // === Socket ===
+  async function fetchSocket() {
+    try {
+      const data = await api('GET', '/api/socket');
+      const path = data.socket_path || '';
+      sockPath.textContent = path;
+      document.getElementById('footerSocket').textContent = path;
+    } catch {
+      sockPath.textContent = 'unknown';
+    }
+  }
+
+  // === Sandboxes ===
+  async function fetchSandboxes() {
+    try {
+      const data = await api('GET', '/api/sandboxes');
+      const list = Array.isArray(data) ? data : (data.sandboxes || data.items || []);
+      state.sandboxes = list;
+
+      // Update summary
+      let total = 0, running = 0, stopped = 0;
+      list.forEach(sb => {
+        total++;
+        if (sb.State && sb.State.Running) running++;
+        else stopped++;
+      });
+      $('#sbTotal').textContent = total;
+      $('#sbRunning').textContent = running;
+      $('#sbStopped').textContent = stopped;
+
+      // Update datalist for port form
+      sandboxListDatalist.innerHTML = list.map(sb =>
+        `<option value="${escapeHtml(sb.Spec ? sb.Spec.RuntimeName : '')}">`
+      ).join('');
+
+      // Render table
+      if (list.length === 0) {
+        sandboxBody.innerHTML = '<tr><td colspan="4"><div class="empty-note" style="padding:20px;text-align:center;">No sandboxes yet. Click "+ Create Sandbox" to create one.</div></td></tr>';
+        return;
+      }
+
+      sandboxBody.innerHTML = list.map((sb, idx) => {
+        const spec = sb.Spec || {};
+        const st = sb.State || {};
+        const name = spec.RuntimeName || '';
+        const agent = spec.AgentName || '';
+        const isRunning = st.Running === true;
+        const statusClass = isRunning ? 'running' : 'stopped';
+        const statusText = isRunning ? 'Running' : 'Stopped';
+        const detailId = 'detail-' + idx;
+        const containerId = 'container-' + idx;
+        return `
+          <tr>
+            <td>${escapeHtml(name)}</td>
+            <td>${escapeHtml(agent)}</td>
+            <td><span class="status-badge ${statusClass}"><span class="status-dot ${statusClass}"></span>${statusText}</span></td>
+            <td style="text-align:right;">
+              <div class="actions-group">
+                <button class="btn-sm details toggle-detail" data-target="${detailId}">Details</button>
+                <button class="btn-sm start-sb" data-name="${escapeHtml(name)}" ${isRunning ? 'style="display:none;"' : ''}>Start</button>
+                <button class="btn-sm stop-sb" data-name="${escapeHtml(name)}" ${isRunning ? '' : 'style="display:none;"'}>Stop</button>
+                <button class="btn-sm ports publish-port-btn" data-name="${escapeHtml(name)}">Port</button>
+                <button class="btn-sm delete delete-sb" data-name="${escapeHtml(name)}">Delete</button>
+              </div>
+            </td>
+          </tr>
+          <tr class="detail-row ${idx < 1 ? 'open' : ''}" id="${detailId}">
+            <td colspan="4" class="detail-cell">
+              <div class="detail-grid">
+                <div class="detail-item"><span class="key">ID</span><span class="val">${escapeHtml(sb.ID || '—')}</span></div>
+                <div class="detail-item"><span class="key">RuntimeName</span><span class="val">${escapeHtml(name)}</span></div>
+                <div class="detail-item"><span class="key">AgentName</span><span class="val">${escapeHtml(agent)}</span></div>
+                <div class="detail-item"><span class="key">WorkspaceDir</span><span class="val">${escapeHtml(spec.WorkspaceDir || '—')}</span></div>
+                <div class="detail-item"><span class="key">SocketPath</span><span class="val">${escapeHtml(st.SocketPath || '—')}</span></div>
+                <div class="detail-item"><span class="key">NetworkName</span><span class="val">${escapeHtml(st.NetworkName || '—')}</span></div>
+                <div class="detail-item"><span class="key">Detached</span><span class="val">${spec.Detached ? 'true' : 'false'}</span></div>
+                <div class="detail-item"><span class="key">PullPolicy</span><span class="val">${escapeHtml(spec.PullPolicy || '—')}</span></div>
+                <div class="detail-item"><span class="key">Profile</span><span class="val">${escapeHtml(spec.Profile || '—')}</span></div>
+                <div class="detail-item"><span class="key">Running</span><span class="val">${isRunning ? 'Yes' : 'No'}</span></div>
+              </div>
+            </td>
+          </tr>
+        `;
+      }).join('');
+
+      // Wire up events
+      $$('.toggle-detail').forEach(btn => {
+        btn.addEventListener('click', function(e) {
+          e.stopPropagation();
+          const row = document.getElementById(this.dataset.target);
+          if (row) {
+            row.classList.toggle('open');
+            this.textContent = row.classList.contains('open') ? 'Hide' : 'Details';
+          }
+        });
+      });
+
+      $$('.delete-sb').forEach(btn => {
+        btn.addEventListener('click', () => deleteSandbox(btn.dataset.name));
+      });
+
+      $$('.start-sb').forEach(btn => {
+        btn.addEventListener('click', () => startSandbox(btn.dataset.name));
+      });
+
+      $$('.stop-sb').forEach(btn => {
+        btn.addEventListener('click', () => stopSandbox(btn.dataset.name));
+      });
+
+      $$('.publish-port-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          document.getElementById('pfSandboxName').value = btn.dataset.name;
+          switchTab('ports');
+        });
+      });
+    } catch (err) {
+      sandboxBody.innerHTML = `<tr><td colspan="4"><div class="empty-note" style="padding:20px;text-align:center;color:#e74c3c;">Error: ${escapeHtml(err.message)}</div></td></tr>`;
+    }
+  }
+
+  async function deleteSandbox(name) {
+    if (!name) return;
+    if (!confirm(`Delete sandbox "${name}"?`)) return;
+    try {
+      await api('DELETE', `/api/sandboxes/${encodeURIComponent(name)}`);
+      showBanner(`Sandbox "${name}" deleted.`, 'success');
+      fetchSandboxes();
+      fetchPorts();
+    } catch (err) {
+      showBanner(`Failed to delete: ${err.message}`, 'error');
+    }
+  }
+
+  // === Start / Stop Sandbox ===
+
+  async function startSandbox(name) {
+    if (!name) return;
+    try {
+      await api('POST', `/api/sandboxes/${encodeURIComponent(name)}/start`);
+      showBanner(`Sandbox "${name}" started.`, 'success');
+      fetchSandboxes();
+    } catch (err) {
+      showBanner(`Failed to start: ${err.message}`, 'error');
+    }
+  }
+
+  async function stopSandbox(name) {
+    if (!name) return;
+    try {
+      await api('POST', `/api/sandboxes/${encodeURIComponent(name)}/stop`);
+      showBanner(`Sandbox "${name}" stopped.`, 'success');
+      fetchSandboxes();
+    } catch (err) {
+      showBanner(`Failed to stop: ${err.message}`, 'error');
+    }
+  }
+  // === Pull Image ===
+
+  async function pullImage(image, tag) {
+    if (!image) return;
+    const body = { image };
+    if (tag) body.tag = tag;
+    try {
+      showBanner(`Pulling image ${image}${tag ? ':' + tag : ''}...`, 'info', false);
+      const resp = await fetch('/api/images/pull', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/x-ndjson' },
+        body: JSON.stringify(body),
+      });
+      if (!resp.ok) {
+        const errData = await resp.json().catch(() => ({ error: resp.statusText }));
+        throw new Error(errData.error || `HTTP ${resp.status}`);
+      }
+      // Read the NDJSON stream
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let lastStatus = '';
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const text = decoder.decode(value, { stream: true });
+        const lines = text.split('\n').filter(Boolean);
+        for (const line of lines) {
+          try {
+            const prog = JSON.parse(line);
+            if (prog.error) throw new Error(prog.error);
+            if (prog.status) lastStatus = prog.status;
+          } catch (e) {
+            if (e.message && e.message !== 'Unexpected token') throw e;
+          }
+        }
+      }
+      showBanner(`Image ${image} pulled successfully.`, 'success');
+      fetchImages();
+    } catch (err) {
+      showBanner(`Pull failed: ${err.message}`, 'error');
+    }
+  }
+
+  // === Create Sandbox ===
+  $('#createForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const btn = $('#cfSubmit');
+    btn.disabled = true;
+    btn.textContent = 'Creating…';
+    try {
+      const runtimeName = $('#cfRuntimeName').value.trim();
+      const agentName = $('#cfAgentName').value.trim();
+      const workspaceDir = $('#cfWorkspaceDir').value.trim();
+      const startUpCmd = $('#cfStartupCmd').value.trim();
+      
+      if (!runtimeName) { showBanner('Runtime name is required.', 'error'); btn.disabled = false; btn.textContent = 'Create Sandbox'; return; }
+      if (!agentName) { showBanner('Agent name is required.', 'error'); btn.disabled = false; btn.textContent = 'Create Sandbox'; return; }
+      if (!workspaceDir) { showBanner('Workspace directory is required.', 'error'); btn.disabled = false; btn.textContent = 'Create Sandbox'; return; }
+
+      const spec = {
+        RuntimeName: runtimeName,
+        AgentName: agentName,
+        WorkspaceDir: workspaceDir,
+        Detached: $('#cfDetached').value === 'true',
+        PullPolicy: $('#cfPullPolicy').value,
+      };
+      const profile = $('#cfProfile').value;
+      if (profile) spec.Profile = profile;
+
+      const body = { spec };
+      if (startUpCmd) body.startup_cmd = startUpCmd;
+
+      await api('POST', '/api/sandboxes', body);
+      showBanner(`Sandbox "${runtimeName}" created.`, 'success');
+      $('#createForm').reset();
+      $('#cfAgentName').value = 'shell';
+      closePanelFn();
+      fetchSandboxes();
+    } catch (err) {
+      showBanner(`Failed: ${err.message}`, 'error');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Create Sandbox';
+    }
+  });
+
+  // === Slide-out Panel ===
+  const btnCreate = $('#btnCreate');
+  const panelContainer = $('#slidePanelContainer');
+  const closePanel = $('#closePanel');
+
+  function openPanel() { panelContainer.classList.add('open'); }
+  function closePanelFn() { panelContainer.classList.remove('open'); }
+
+  btnCreate.addEventListener('click', openPanel);
+  closePanel.addEventListener('click', closePanelFn);
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && panelContainer.classList.contains('open')) closePanelFn();
+  });
+
+  // === Templates ===
+  async function fetchTemplates() {
+    try {
+      const data = await api('GET', '/api/templates');
+      const list = Array.isArray(data) ? data : (data.templates || data.items || []);
+      state.templates = list;
+      if (list.length === 0) {
+        templateStrip.innerHTML = '<span class="empty-note">No templates available.</span>';
+        return;
+      }
+      templateStrip.innerHTML = list.map(t => {
+        const name = t.flavor || t.id || t.Repository || '';
+        const desc = t.repository ? t.repository + (t.tag ? ':' + t.tag : '') : '';
+        return `<span class="template-chip"><span class="tname">${escapeHtml(name)}</span>${desc ? `<span class="tdesc">${escapeHtml(desc)}</span>` : ''}</span>`;
+      }).join('');
+
+      // Populate profile dropdown
+      const select = $('#cfProfile');
+      list.forEach(t => {
+        const val = t.flavor || t.id || '';
+        if (val) {
+          const opt = document.createElement('option');
+          opt.value = val;
+          opt.textContent = val;
+          select.appendChild(opt);
+        }
+      });
+    } catch (err) {
+      templateStrip.innerHTML = `<span class="empty-note">Error loading templates: ${escapeHtml(err.message)}</span>`;
+    }
+  }
+
+  // === Docker Images ===
+  async function fetchImages() {
+    try {
+      const data = await api('GET', '/api/images');
+      const list = Array.isArray(data) ? data : (data.images || data.items || []);
+      const el = document.getElementById('dockerImagesStrip');
+      if (!el) return;
+      if (list.length === 0) {
+        el.innerHTML = '<span class="empty-note">No images cached locally.</span>';
+        return;
+      }
+      el.innerHTML = list.map(img => {
+        const tags = (img.RepoTags || []).join(', ');
+        const size = img.Size ? (img.Size / 1024 / 1024).toFixed(1) + ' MB' : '';
+        return `<span class="template-chip"><span class="tname">${escapeHtml(tags)}</span>${size ? '<span class="tdesc">' + escapeHtml(size) + '</span>' : ''}</span>`;
+      }).join('');
+    } catch (err) {
+      const el = document.getElementById('dockerImagesStrip');
+      if (el) el.innerHTML = `<span class="empty-note" style="color:#e74c3c;">Error: ${escapeHtml(err.message)}</span>`;
+    }
+  }
+
+  // === Policy Rules ===
+  async function fetchPolicyRules() {
+    try {
+      const data = await api('GET', '/api/policy/rules');
+      const rules = Array.isArray(data) ? data : (data.rules || data.items || []);
+      state.rules = rules;
+      renderPolicyTable(policyBody, rules, false);
+      renderPolicyTable(policyFullBody, rules, true);
+    } catch (err) {
+      const msg = `<tr><td colspan="4"><div class="empty-note" style="color:#e74c3c;">Error: ${escapeHtml(err.message)}</div></td></tr>`;
+      policyBody.innerHTML = msg;
+      policyFullBody.innerHTML = msg.replace('4">', '6">');
+    }
+  }
+
+  function renderPolicyTable(tbody, rules, showId) {
+    if (rules.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="' + (showId ? 6 : 4) + '"><div class="empty-note">No policy rules defined.</div></td></tr>';
+      return;
+    }
+    tbody.innerHTML = rules.map(r => {
+      const id = r.id || '';
+      const action = r.decision || r.action || r.type || '';
+      const resource = (r.resources || []).join(', ');
+      const scope = r.sandbox || r.scope || '';
+      const status = r.status || '';
+      if (showId) {
+        return `<tr>
+          <td><code>${escapeHtml(id.substring(0,8))}&hellip;</code></td>
+          <td><span class="action-tag ${action}">${escapeHtml(action)}</span></td>
+          <td>${escapeHtml(resource)}</td>
+          <td>${escapeHtml(scope) || '<span class="empty-note">—</span>'}</td>
+          <td>${escapeHtml(status) || '<span class="empty-note">—</span>'}</td>
+          <td><button class="btn-sm remove-pol remove-pol-id" data-id="${escapeHtml(id)}">✕</button></td>
+        </tr>`;
+      }
+      // Inline table (sandbox tab) — no remove button, just display
+      return `<tr>
+        <td><span class="action-tag ${action}">${escapeHtml(action)}</span></td>
+        <td>${escapeHtml(resource)}</td>
+        <td>${escapeHtml(scope) || '<span class="empty-note">—</span>'}</td>
+        <td></td>
+      </tr>`;
+    }).join('');
+
+    // Only attach remove listeners when showing the full table with IDs
+    if (showId) {
+      tbody.querySelectorAll('.remove-pol-id').forEach(btn => {
+        btn.addEventListener('click', async function() {
+          const id = this.dataset.id;
+          if (!id) return;
+          if (!confirm('Remove this policy rule?')) return;
+          try {
+            await api('POST', '/api/policy/rules', { actions: [{ action: 'remove-id', id }] });
+            showBanner('Rule removed.', 'success');
+            fetchPolicyRules();
+          } catch (err) {
+            showBanner(`Failed: ${err.message}`, 'error');
+          }
+        });
+      });
+    }
+  }
+
+  // === Add Policy Rule ===
+  $('#btnAddPolicy').addEventListener('click', async function() {
+    const action = $('#polAction').value;
+    const resource = $('#polResource').value.trim();
+    const scope = $('#polScope').value.trim();
+
+    if (!resource) { showBanner('Please enter a resource or ID.', 'error'); return; }
+
+    try {
+      if (action === 'allow' || action === 'deny') {
+        const resources = resource.split(',').map(s => s.trim()).filter(Boolean);
+        const a = { action, resources };
+        if (scope) a.scope = scope;
+        await api('POST', '/api/policy/rules', { actions: [a] });
+      } else if (action === 'remove-resource') {
+        const resources = resource.split(',').map(s => s.trim()).filter(Boolean);
+        await api('POST', '/api/policy/rules', { actions: [{ action: 'remove-resource', resources }] });
+      } else if (action === 'remove-id') {
+        await api('POST', '/api/policy/rules', { actions: [{ action: 'remove-id', id: resource }] });
+      }
+      showBanner('Policy rule applied.', 'success');
+      $('#polResource').value = '';
+      $('#polScope').value = '';
+      fetchPolicyRules();
+    } catch (err) {
+      showBanner(`Failed: ${err.message}`, 'error');
+    }
+  });
+
+  // === Pull Image ===
+  const pullImageBtn = $('#btnPullImage');
+  if (pullImageBtn) {
+    pullImageBtn.addEventListener('click', async function() {
+      const image = $('#pullImageName').value.trim();
+      const tag = $('#pullImageTag').value.trim();
+      if (!image) { showBanner('Image name is required.', 'error'); return; }
+      await pullImage(image, tag || '');
+    });
+    // Allow pressing Enter in the input field
+    $('#pullImageName').addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') pullImageBtn.click();
+    });
+    $('#pullImageTag').addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') pullImageBtn.click();
+    });
+  }
+
+  // === Set Default Policy ===
+  $('#btnSetPolicyPreset').addEventListener('click', async function() {
+    const preset = $('#policyPreset').value;
+    try {
+      await api('POST', '/api/policy/setup', { preset });
+      showBanner(`Default policy set to "${preset}".`, 'success');
+    } catch (err) {
+      showBanner(`Failed: ${err.message}`, 'error');
+    }
+  });
+
+  // === Network Log ===
+  async function fetchNetworkLog() {
+    try {
+      const data = await api('GET', '/api/network/log');
+      const blocked = data.blocked_hosts || [];
+      const allowed = data.allowed_hosts || [];
+      $('#netlogBlockedCount').textContent = blocked.length;
+      $('#netlogAllowedCount').textContent = allowed.length;
+      renderNetworkLogTable($('#netlogBlockedBody'), blocked, 'blocked');
+      renderNetworkLogTable($('#netlogAllowedBody'), allowed, 'allowed');
+    } catch (err) {
+      const msg = `<tr><td colspan="8"><div class="empty-note" style="color:#e74c3c;">Error: ${escapeHtml(err.message)}</div></td></tr>`;
+      $('#netlogBlockedBody').innerHTML = msg;
+      $('#netlogAllowedBody').innerHTML = msg;
+    }
+  }
+
+  function formatDateTime(str) {
+    if (!str) return '—';
+    try {
+      const d = new Date(str);
+      return d.toLocaleString();
+    } catch (_) { return str; }
+  }
+
+  function renderNetworkLogTable(tbody, entries, type) {
+    if (entries.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="8"><div class="empty-note">No ' + type + ' hosts.</div></td></tr>';
+      return;
+    }
+    tbody.innerHTML = entries.map(e => {
+      const host = e.host || e.Host || '';
+      const vmName = e.vm_name || e.VMName || '';
+      const proxyType = e.proxy_type || e.ProxyType || '';
+      const rule = e.rule || e.Rule || '';
+      const count = e.count_since || e.CountSince || 0;
+      const lastSeen = formatDateTime(e.last_seen || e.LastSeen);
+      const reason = e.reason || e.Reason || '';
+      const actionToTake = type === 'blocked' ? 'allow' : 'deny';
+      const actionLabel = type === 'blocked' ? 'Allow' : 'Block';
+      const actionClass = type === 'blocked' ? 'allow-pol' : 'deny-pol';
+      return `<tr>
+        <td><span class="netlog-host">${escapeHtml(host)}</span></td>
+        <td>${escapeHtml(vmName)}</td>
+        <td>${escapeHtml(proxyType)}</td>
+        <td>${escapeHtml(rule) || '<span class="empty-note">—</span>'}</td>
+        <td>${escapeHtml(count)}</td>
+        <td>${escapeHtml(lastSeen)}</td>
+        <td style="font-size:0.75rem;color:#8888aa;">${escapeHtml(reason) || '<span class="empty-note">—</span>'}</td>
+        <td><button class="btn-sm ${actionClass} netlog-action" data-action="${actionToTake}" data-host="${escapeHtml(host)}">${actionLabel}</button></td>
+      </tr>`;
+    }).join('');
+
+    tbody.querySelectorAll('.netlog-action').forEach(btn => {
+      btn.addEventListener('click', async function() {
+        const action = this.dataset.action;
+        const host = this.dataset.host;
+        if (!host) return;
+        const label = action === 'allow' ? 'Allow' : 'Block';
+        if (!confirm(`${label} host "${host}"? This will create a policy rule.`)) return;
+        try {
+          const resources = [host];
+          await api('POST', '/api/policy/rules', { actions: [{ action, resources }] });
+          showBanner(`Policy rule created: ${action} "${host}".`, 'success');
+          fetchNetworkLog();
+          fetchPolicyRules();
+        } catch (err) {
+          showBanner(`Failed: ${err.message}`, 'error');
+        }
+      });
+    });
+  }
+
+  // === Ports ===
+  async function fetchPorts() {
+    try {
+      const data = await api('GET', '/api/ports');
+      const list = Array.isArray(data) ? data : (data.ports || data.items || []);
+      state.ports = list;
+      if (list.length === 0) {
+        portsBody.innerHTML = '<tr><td colspan="6"><div class="empty-note">No ports published.</div></td></tr>';
+        return;
+      }
+      portsBody.innerHTML = list.map(p => {
+        const sandboxName = p.sandbox_name || p.SandboxName || '';
+        const hostPort = p.host_port || '';
+        const sandboxPort = p.sandbox_port || p.SandboxPort || '';
+        const hostIP = p.host_ip || p.HostIP || '';
+        const protocol = p.protocol || p.Protocol || 'tcp';
+        return `<tr>
+          <td>${escapeHtml(hostIP)}</td>
+          <td>${escapeHtml(sandboxName)}</td>
+          <td>${escapeHtml(hostPort)}</td>
+          <td>${escapeHtml(sandboxPort)}</td>
+          <td>${escapeHtml(protocol)}</td>
+          <td><button class="btn-sm unpublish unpublish-port" data-sandbox="${escapeHtml(sandboxName)}" data-hostport="${escapeHtml(hostPort)}" data-sandboxport="${escapeHtml(sandboxPort)}">✕</button></td>
+        </tr>`;
+      }).join('');
+
+      portsBody.querySelectorAll('.unpublish-port').forEach(btn => {
+        btn.addEventListener('click', async function() {
+          const sandboxName = this.dataset.sandbox;
+          const hostPort = this.dataset.hostport;
+          if (!sandboxName || !hostPort || !this.dataset.sandboxport) return;
+          if (!confirm(`Unpublish host port ${hostPort} (sandbox port ${this.dataset.sandboxport}) from sandbox "${sandboxName}"?`)) return;
+          try {
+            await api('DELETE', `/api/ports`, { sandbox_name: sandboxName, host_port: parseInt(hostPort, 10), sandbox_port: parseInt(this.dataset.sandboxport, 10) });
+            showBanner('Port unpublished.', 'success');
+            fetchPorts();
+          } catch (err) {
+            showBanner(`Failed: ${err.message}`, 'error');
+          }
+        });
+      });
+    } catch (err) {
+      portsBody.innerHTML = `<tr><td colspan="6"><div class="empty-note" style="color:#e74c3c;">Error: ${escapeHtml(err.message)}</div></td></tr>`;
+    }
+  }
+
+  // === Publish Port ===
+  $('#btnAddPort').addEventListener('click', async function() {
+    const sandboxName = $('#pfSandboxName').value.trim();
+    const hostPort = $('#pfHostPort').value.trim();
+    const sandboxPort = $('#pfSandboxPort').value.trim();
+    const protocol = $('#pfProtocol').value;
+
+    if (!sandboxName) { showBanner('Sandbox name is required.', 'error'); return; }
+    if (!hostPort) { showBanner('Host port is required.', 'error'); return; }
+    if (!sandboxPort) { showBanner('Sandbox port is required.', 'error'); return; }
+
+    try {
+      await api('POST', '/api/ports', {
+        sandbox_name: sandboxName,
+        host_port: parseInt(hostPort, 10),
+        sandbox_port: parseInt(sandboxPort, 10),
+        protocol: protocol,
+      });
+      showBanner(`Port ${hostPort}:${sandboxPort} published for "${sandboxName}".`, 'success');
+      $('#pfSandboxName').value = '';
+      $('#pfHostPort').value = '';
+      $('#pfSandboxPort').value = '';
+      fetchPorts();
+    } catch (err) {
+      showBanner(`Failed: ${err.message}`, 'error');
+    }
+  });
+
+  // === Tabs ===
+  function switchTab(name) {
+    $$('.tab-panel').forEach(p => p.classList.remove('active'));
+    const panel = $(`#panel-${name}`);
+    if (panel) panel.classList.add('active');
+    $$('.tab-nav button').forEach(b => {
+      b.classList.toggle('active', b.dataset.tab === name);
+    });
+    // Refresh data when switching
+    if (name === 'sandboxes') { fetchSandboxes(); fetchPolicyRules(); fetchTemplates(); fetchImages(); }
+    if (name === 'ports') { fetchPorts(); }
+    if (name === 'policy') { fetchPolicyRules(); }
+    if (name === 'network-log') { fetchNetworkLog(); }
+  }
+
+  $$('.tab-nav button').forEach(btn => {
+    btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+  });
+
+  // === Start ===
+  init();
+
+})();
+</script>
+</body>
+</html>

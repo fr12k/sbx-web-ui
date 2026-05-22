@@ -1,0 +1,675 @@
+openapi: "3.0.3"
+info:
+  title: Docker Sandboxes (sbx) Daemon API
+  description: |
+    HTTP API exposed by the Docker Sandboxes daemon (`sandboxd`) over a Unix
+    domain socket. Used internally by the `sbx` CLI and TUI dashboard.
+
+    The socket lives at:
+      - macOS: `~/Library/Application Support/com.docker.sandboxes/sandboxes/sandboxd/sandboxd.sock`
+      - Linux: `/run/sandboxd/sandboxd.sock`
+      - Windows: `\\.\pipe\docker-sandboxes-sandboxd`
+
+    All requests are `http://localhost/…` routed through the socket.
+  version: "0.2.0"
+servers:
+  - url: http://localhost
+    description: sandboxd Unix domain socket (--unix-socket)
+paths:
+  # ── Daemon ──────────────────────────────────────────────
+  /daemon/health:
+    get:
+      operationId: getDaemonHealth
+      summary: Health check
+      description: Returns daemon version, API version, and health status.
+      responses:
+        "200":
+          description: Daemon is healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DaemonHealth"
+
+  /daemon/info:
+    get:
+      operationId: getDaemonInfo
+      summary: Daemon info
+      description: Returns daemon configuration details (socket paths, etc.).
+      responses:
+        "200":
+          description: Daemon configuration
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DaemonInfo"
+
+  # ── Runtime (Sandbox Lifecycle) ─────────────────────────
+  /runtime:
+    get:
+      operationId: listSandboxes
+      summary: List all sandboxes
+      description: Returns all sandbox runtimes with their full specs and state.
+      responses:
+        "200":
+          description: Array of sandbox runtimes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Runtime"
+    post:
+      operationId: createSandbox
+      summary: Create a new sandbox
+      description: Creates a new sandbox runtime with the given spec.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [spec]
+              properties:
+                spec:
+                  $ref: "#/components/schemas/RuntimeSpec"
+      responses:
+        "200":
+          description: Sandbox created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Runtime"
+        "400":
+          description: Invalid request (missing required fields, agent not found, etc.)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /runtime/{name}:
+    delete:
+      operationId: deleteSandbox
+      summary: Delete a sandbox
+      description: Removes a sandbox runtime by name.
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Sandbox runtime name
+      responses:
+        "204":
+          description: Sandbox deleted (no content)
+        "404":
+          description: Sandbox not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  # ── Ports ────────────────────────────────────────────────
+  /runtime/{name}/ports:
+    get:
+      operationId: listPorts
+      summary: List published ports
+      description: Returns all published port mappings for a sandbox runtime.
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Sandbox runtime name
+      responses:
+        "200":
+          description: Array of port mappings
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PortMapping"
+    post:
+      operationId: publishPort
+      summary: Publish a sandbox port
+      description: |
+        Maps a sandbox port to a host port. Returns two entries (IPv4 and IPv6).
+        When `host_port` is omitted, an ephemeral port is auto-assigned.
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Sandbox runtime name
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PublishPortRequest"
+      responses:
+        "200":
+          description: Port published
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PortMapping"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    delete:
+      operationId: unpublishPort
+      summary: Unpublish a port
+      description: |
+        Removes a port mapping. `host_port` is required.
+        Without `host_ip`, both the IPv4 and IPv6 entries with that host port are removed.
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Sandbox runtime name
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UnpublishPortRequest"
+      responses:
+        "204":
+          description: Port unpublished (no content)
+        "400":
+          description: Invalid request (e.g. missing host_port)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  # ── Network Policy ──────────────────────────────────────
+  rules:
+    get:
+      operationId: listPolicyRules
+      summary: List network policy rules
+      description: Returns all active network policy rules.
+      responses:
+        "200":
+          description: Policy rules
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  rules:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/PolicyRule"
+    post:
+      operationId: applyPolicyActions
+      summary: Apply policy actions (allow, deny, remove)
+      description: |
+        Add, modify, or remove network policy rules.
+
+        Supported actions:
+        - `allow` + `resources` (optional `scope`)
+        - `deny` + `resources`
+        - `remove-resource` + `resources`
+        - `remove-id` + `id` (UUID)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [actions]
+              properties:
+                actions:
+                  type: array
+                  minItems: 1
+                  items:
+                    oneOf:
+                      - $ref: "#/components/schemas/PolicyActionAllow"
+                      - $ref: "#/components/schemas/PolicyActionDeny"
+                      - $ref: "#/components/schemas/PolicyActionRemoveResource"
+                      - $ref: "#/components/schemas/PolicyActionRemoveId"
+                    discriminator:
+                      propertyName: action
+                      mapping:
+                        allow: "#/components/schemas/PolicyActionAllow"
+                        deny: "#/components/schemas/PolicyActionDeny"
+                        remove-resource: "#/components/schemas/PolicyActionRemoveResource"
+                        remove-id: "#/components/schemas/PolicyActionRemoveId"
+      responses:
+        "200":
+          description: Actions applied
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  results:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/PolicyActionResult"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /policy/setup:
+    get:
+      operationId: checkPolicySetup
+      summary: Check if policy setup is needed
+      description: Returns whether the user needs to choose a default policy profile.
+      responses:
+        "200":
+          description: Setup status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  needed:
+                    type: boolean
+    post:
+      operationId: setDefaultPolicy
+      summary: Set default network policy profile
+      description: Configures the default network policy profile.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [preset]
+              properties:
+                preset:
+                  type: string
+                  enum: [balanced, allow-all, deny-all]
+      responses:
+        "200":
+          description: Policy configured
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  applied:
+                    type: boolean
+                  already_configured:
+                    type: boolean
+                  existing_preset:
+                    type: string
+
+  /policy/profiles:
+    get:
+      operationId: listPolicyProfiles
+      summary: List available policy profiles
+      responses:
+        "200":
+          description: Policy profiles
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  profiles:
+                    type: array
+                    items:
+                      type: object
+
+  # ── Network Activity Log ──────────────────────────────
+  /network/log:
+    get:
+      operationId: getNetworkLog
+      summary: List denied and allowed network connections
+      description: |
+        Returns all blocked (denied) and allowed network connections tracked
+        by the proxy, with per-host metadata including the sandbox VM,
+        proxy type, matched rule, timestamps, and hit count.
+
+        This is the data that powers the "denied network access" view in the
+        TUI dashboard (`sbx ui`).
+      responses:
+        "200":
+          description: Network activity log
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NetworkLog"
+
+  # ── Templates ───────────────────────────────────────────
+  /template:
+    get:
+      operationId: listTemplates
+      summary: List available sandbox templates
+      responses:
+        "200":
+          description: Array of templates
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Template"
+
+components:
+  schemas:
+    # ── Error ─────────────────────────────────────────────
+    Error:
+      type: object
+      properties:
+        message:
+          type: string
+
+    # ── Daemon ────────────────────────────────────────────
+    DaemonHealth:
+      type: object
+      properties:
+        version:
+          type: string
+          example: v0.30.0
+        api_version:
+          type: string
+          example: "0.2.0"
+        status:
+          type: string
+          enum: [healthy, unhealthy]
+        message:
+          type: string
+
+    DaemonInfo:
+      type: object
+      properties:
+        sandboxd_socket:
+          type: string
+        proxy_socket:
+          type: string
+
+    # ── Runtime ───────────────────────────────────────────
+    Runtime:
+      type: object
+      properties:
+        ID:
+          type: string
+          format: uuid
+          description: Daemon-assigned sandbox UUID
+        Spec:
+          $ref: "#/components/schemas/RuntimeSpec"
+        State:
+          $ref: "#/components/schemas/RuntimeState"
+
+    RuntimeSpec:
+      type: object
+      required: [RuntimeName, WorkspaceDir, AgentName]
+      properties:
+        RuntimeName:
+          type: string
+        AgentName:
+          type: string
+          example: shell
+        WorkspaceDir:
+          type: string
+        AdditionalWorkspaces:
+          type: array
+          items:
+            type: string
+        Profile:
+          type: string
+        PatchClaudeSettings:
+          type: boolean
+        Detached:
+          type: boolean
+        PullPolicy:
+          type: string
+          enum: ["", always, missing]
+        Credentials:
+          $ref: "#/components/schemas/Credentials"
+        Services:
+          $ref: "#/components/schemas/ServicesConfig"
+
+    RuntimeState:
+      type: object
+      properties:
+        Running:
+          type: boolean
+        SocketPath:
+          type: string
+        NetworkName:
+          type: string
+        ProxyEnvVars:
+          type: object
+          additionalProperties:
+            type: string
+
+    Credentials:
+      type: object
+      properties:
+        Scope:
+          type: string
+        Services:
+          type: array
+          items:
+            type: string
+        Sources:
+          type: object
+          additionalProperties:
+            type: string
+        Values:
+          type: array
+          items:
+            type: object
+        CustomSecrets:
+          type: array
+          items:
+            type: object
+            properties:
+              target:
+                type: string
+              env_name:
+                type: string
+              sentinel:
+                type: string
+              value:
+                type: string
+
+    ServicesConfig:
+      type: object
+      properties:
+        Domains:
+          type: object
+          additionalProperties:
+            type: string
+        AuthConfig:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/AuthServiceConfig"
+        AllowedDomains:
+          type: array
+          items:
+            type: string
+          nullable: true
+        DeniedDomains:
+          type: array
+          items:
+            type: string
+          nullable: true
+
+    AuthServiceConfig:
+      type: object
+      properties:
+        header_name:
+          type: string
+        value_format:
+          type: string
+
+    # ── Policy ────────────────────────────────────────────
+    PolicyRule:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        type:
+          type: string
+          enum: [network]
+        origin:
+          type: string
+          enum: [local, sandbox]
+        decision:
+          type: string
+          enum: [allow, deny]
+        status:
+          type: string
+          enum: [active, inactive]
+        resources:
+          type: array
+          items:
+            type: string
+        sandbox:
+          type: string
+          nullable: true
+
+    PolicyActionAllow:
+      type: object
+      required: [action, resources]
+      properties:
+        action:
+          type: string
+          enum: [allow]
+        resources:
+          type: array
+          items:
+            type: string
+          minItems: 1
+        scope:
+          type: string
+
+    PolicyActionDeny:
+      type: object
+      required: [action, resources]
+      properties:
+        action:
+          type: string
+          enum: [deny]
+        resources:
+          type: array
+          items:
+            type: string
+          minItems: 1
+
+    PolicyActionRemoveResource:
+      type: object
+      required: [action, resources]
+      properties:
+        action:
+          type: string
+          enum: [remove-resource]
+        resources:
+          type: array
+          items:
+            type: string
+          minItems: 1
+
+    PolicyActionRemoveId:
+      type: object
+      required: [action, id]
+      properties:
+        action:
+          type: string
+          enum: [remove-id]
+        id:
+          type: string
+          format: uuid
+
+    PolicyActionResult:
+      type: object
+      properties:
+        action:
+          type: string
+        resources:
+          type: array
+          items:
+            type: string
+        id:
+          type: string
+          format: uuid
+        error:
+          type: string
+          nullable: true
+
+    # ── Network Log ───────────────────────────────────────
+    NetworkLog:
+      type: object
+      description: Snapshot of denied and allowed network connections seen by the proxy.
+      properties:
+        blocked_hosts:
+          type: array
+          description: Network connections that were denied
+          items:
+            $ref: "#/components/schemas/NetworkLogEntry"
+        allowed_hosts:
+          type: array
+          description: Network connections that were allowed
+          items:
+            $ref: "#/components/schemas/NetworkLogEntry"
+
+    NetworkLogEntry:
+      type: object
+      properties:
+        host:
+          type: string
+          description: Target host and port (e.g. "example.com:443")
+        vm_name:
+          type: string
+          description: The sandbox runtime / VM that initiated the connection
+        proxy_type:
+          type: string
+          description: How the connection went through the proxy
+          enum: [forward, forward-bypass, transparent, direct]
+        rule:
+          type: string
+          description: The policy rule that matched (or "no applicable policies for ...")
+        last_seen:
+          type: string
+          format: date-time
+          description: Most recent observation timestamp
+        since:
+          type: string
+          format: date-time
+          description: First observation timestamp
+        count_since:
+          type: integer
+          description: Number of times this host was hit since first observation
+        reason:
+          type: string
+          description: Human-readable explanation (e.g. "No matching allow rule (default deny)")
+
+    # ── Templates ─────────────────────────────────────────
+    Template:
+      type: object
+      properties:
+        id:
+          type: string
+        repository:
+          type: string
+        tag:
+          type: string
+        flavor:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        size:
+          type: integer
