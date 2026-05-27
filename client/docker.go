@@ -953,6 +953,11 @@ func DetectDockerSocket() string {
 		"/tmp/sboxd-sandboxes/docker.sock",
 	}
 
+	// Per-user XDG_STATE_HOME path (Ubuntu / non-root Docker Sandboxes)
+	if p := perUserDockerSocket(); p != "" {
+		candidates = append(candidates, p)
+	}
+
 	// Try to find by PID
 	uid := os.Getuid()
 	candidates = append(candidates,

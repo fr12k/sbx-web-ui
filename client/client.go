@@ -22,16 +22,60 @@ import (
 
 // DefaultSocketPath returns the default sandboxd Unix socket path for the
 // current operating system.
+//
+// On Linux the socket can live in two places:
+//   - /run/sandboxd/sandboxd.sock          (system-wide, root-managed)
+//   - $XDG_STATE_HOME/sandboxes/sandboxes/sandboxd/sandboxd.sock  (per-user)
+//     (XDG_STATE_HOME defaults to ~/.local/state when unset)
+//
+// The function probes the per-user path first (when the file exists and is a
+// Unix domain socket) and falls back to the system-wide path. On macOS the
+// standard path under ~/Library/Application Support is always used.
 func DefaultSocketPath() string {
 	switch runtime.GOOS {
 	case "darwin":
 		home, _ := os.UserHomeDir()
 		return home + "/Library/Application Support/com.docker.sandboxes/sandboxes/sandboxd/sandboxd.sock"
 	case "linux":
+		// Prefer the per-user socket under XDG_STATE_HOME / ~/.local/state.
+		// This is where Docker Sandboxes places the socket when started by a
+		// non-root user on Ubuntu and other distros.
+		userSocket := perUserSandboxdSocket()
+		if info, err := os.Stat(userSocket); err == nil && info.Mode()&os.ModeSocket != 0 {
+			return userSocket
+		}
 		return "/run/sandboxd/sandboxd.sock"
 	default:
 		return ""
 	}
+}
+
+// perUserSandboxdSocket returns the per-user sandboxd socket path, honouring
+// the XDG_STATE_HOME environment variable when set.
+func perUserSandboxdSocket() string {
+	base := os.Getenv("XDG_STATE_HOME")
+	if base == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "" // can't determine path without a home dir
+		}
+		base = home + "/.local/state"
+	}
+	return base + "/sandboxes/sandboxes/sandboxd/sandboxd.sock"
+}
+
+// perUserDockerSocket returns the per-user sandboxd Docker Engine socket path,
+// honouring the XDG_STATE_HOME environment variable when set.
+func perUserDockerSocket() string {
+	base := os.Getenv("XDG_STATE_HOME")
+	if base == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "" // can't determine path without a home dir
+		}
+		base = home + "/.local/state"
+	}
+	return base + "/sandboxes/sandboxes/sandboxd/docker.sock"
 }
 
 // UnixSocketDialer returns an http.Transport whose DialContext connects to the
